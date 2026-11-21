@@ -1,0 +1,4 @@
+# Statistiques GitHub (Linguist) : projet Rust ; sources de référence et outils ignorés.
+ref/**     linguist-vendored
+tools/**   linguist-vendored
+*.bin      binary

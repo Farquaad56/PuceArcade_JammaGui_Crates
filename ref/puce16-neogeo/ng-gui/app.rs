@@ -1,0 +1,747 @@
+//! Interface egui : affiche la dernière trame reçue du thread d'émulation.
+
+use eframe::egui::{self, Key};
+
+use std::path::PathBuf;
+
+use ng_cart::Config;
+
+use crate::audio;
+use crate::bios_menu::{self, BiosEntry};
+use crate::controls_menu::ControlsWindow;
+use crate::debugger::{DebugAction, Debugger, Region, Tab};
+use crate::dips_menu::DipsWindow;
+use crate::display::{self, DisplayRect};
+use crate::emu_thread::{self, Cmd, EmuHandle, FrameMsg};
+use crate::fx_menu::FxWindow;
+use crate::input::{self, Bindings, InputState};
+use crate::menu::{self, MenuAction, MenuState};
+use crate::overlay::{self, Perf, RunState};
+use crate::postfx::{self, Fx};
+use crate::prefs::{self, Prefs};
+use crate::settings::ConfigForm;
+use crate::statusbar::{format_status, StatusInfo};
+use ng_core::DebugLevel;
+
+/// Ce qui détermine l'image filtrée en cache.
+#[derive(Clone, Copy, PartialEq)]
+struct FxKey {
+    frame: u64,
+    px: (u32, u32),
+    fx: Fx,
+}
+
+pub const FB_W: usize = display::FB_W as usize;
+pub const FB_H: usize = display::FB_H as usize;
+
+/// En plein écran, la barre de menus apparaît quand la souris est à moins de 8 points du bord
+/// haut et reste tant qu'elle est sur la barre.
+const MENU_REVEAL: f32 = 8.0;
+const MENU_KEEP: f32 = 32.0;
+/// Largeur initiale (points) du panneau de débogage : tient une ligne de mémoire et l'image fix x2.
+const DEBUG_PANEL_W: f32 = 660.0;
+/// Délai d'inactivité (s) avant de masquer le curseur en plein écran.
+const CURSOR_HIDE_AFTER: f32 = 2.0;
+
+/// Convertit un framebuffer 0x00RRGGBB en image egui.
+pub fn to_color_image(pixels: &[u32]) -> egui::ColorImage {
+    let rgba: Vec<egui::Color32> = pixels
+        .iter()
+        .map(|p| egui::Color32::from_rgb((p >> 16) as u8, (p >> 8) as u8, *p as u8))
+        .collect();
+    egui::ColorImage {
+        size: [FB_W, FB_H],
+        source_size: egui::vec2(FB_W as f32, FB_H as f32),
+        pixels: rgba,
+    }
+}
+
+/// Message affiché quand le BIOS configuré n'est pas utilisable.
+pub fn missing_bios_message(cfg: &Config, bios: &[BiosEntry]) -> Option<String> {
+    let known = bios.iter().find(|b| b.file == cfg.bios);
+    match known {
+        Some(b) if b.present => None,
+        // BIOS hors liste : on ne sait pas, le chargement du jeu le dira
+        None => None,
+        Some(_) => Some(format!(
+            "BIOS « {} » introuvable dans {} : choisissez-en un dans Système > BIOS",
+            cfg.bios,
+            cfg.bios_dir.display()
+        )),
+    }
+}
+
+/// La barre de menus est-elle visible en plein écran ? `y` = ordonnée de la souris.
+pub fn menu_revealed(was_shown: bool, y: Option<f32>, popup_open: bool) -> bool {
+    popup_open || y.is_some_and(|y| y < if was_shown { MENU_KEEP } else { MENU_REVEAL })
+}
+
+pub struct App {
+    cfg: Option<Config>,
+    cfg_path: PathBuf,
+    form: ConfigForm,
+    emu: Option<EmuHandle>,
+    texture: Option<egui::TextureHandle>,
+    last: Option<FrameMsg>,
+    error: Option<String>,
+    paused: bool,
+    prefs: Prefs,
+    /// Dernières préférences écrites sur disque (évite d'écrire à chaque trame).
+    saved: Prefs,
+    prefs_path: PathBuf,
+    /// BIOS connus et leur présence (recalculé quand la configuration change).
+    bios: Vec<BiosEntry>,
+    game: Option<String>,
+    input: InputState,
+    /// Reste fractionnaire du déplacement de souris (trackball / molette).
+    mouse_acc: egui::Vec2,
+    controls: ControlsWindow,
+    dips: DipsWindow,
+    fx_win: FxWindow,
+    perf: Perf,
+    /// L'émulation est arrêtée (machine déchargée) ; `game` reste connu pour redémarrer.
+    stopped: bool,
+    fx_tex: Option<(FxKey, egui::TextureHandle)>,
+    debugger: Debugger,
+    /// Dernier niveau de débogage envoyé au thread d'émulation.
+    debug_level: DebugLevel,
+    /// Dernier état plein écran demandé à la fenêtre.
+    fullscreen_applied: Option<bool>,
+    menu_shown: bool,
+    /// Placement de l'image à la dernière trame dessinée.
+    shown: Option<DisplayRect>,
+}
+
+impl App {
+    /// `game` : jeu à lancer tout de suite (si la configuration est lisible).
+    pub fn new(cfg_path: PathBuf, game: Option<String>) -> Self {
+        let cfg = ng_cart::load_config(&cfg_path).ok();
+        let emu = cfg.clone().map(emu_thread::spawn);
+        let prefs_path = prefs::prefs_path(&cfg_path);
+        let prefs = Prefs::load(&prefs_path);
+        let bindings = Bindings::from_prefs(&prefs.input);
+        let debugger = Debugger::new(
+            prefs.debug.open,
+            Tab::from_name(&prefs.debug.tab).unwrap_or_default(),
+            Region::from_name(&prefs.debug.region).unwrap_or_default(),
+        );
+        let bios = cfg
+            .as_ref()
+            .map(bios_menu::available_bios)
+            .unwrap_or_default();
+        let error = cfg.as_ref().and_then(|c| missing_bios_message(c, &bios));
+        let mut app = Self {
+            cfg,
+            cfg_path,
+            form: ConfigForm::default(),
+            emu,
+            texture: None,
+            last: None,
+            error,
+            bios,
+            paused: false,
+            saved: prefs.clone(),
+            prefs,
+            prefs_path,
+            game: None,
+            input: InputState::with_bindings(bindings),
+            mouse_acc: egui::Vec2::ZERO,
+            controls: ControlsWindow::default(),
+            dips: DipsWindow::default(),
+            fx_win: FxWindow::default(),
+            perf: Perf::default(),
+            stopped: false,
+            fx_tex: None,
+            debugger,
+            debug_level: DebugLevel::Off,
+            fullscreen_applied: None,
+            menu_shown: false,
+            shown: None,
+        };
+        if let (Some(g), true) = (game, app.cfg.is_some()) {
+            app.load_game(&g);
+        }
+        app
+    }
+
+    pub fn send(&self, cmd: Cmd) {
+        if let Some(e) = &self.emu {
+            let _ = e.tx.send(cmd);
+        }
+    }
+
+    /// Le jeu courant se joue avec le panneau mahjong.
+    fn is_mahjong(&self) -> bool {
+        self.game
+            .as_deref()
+            .and_then(ng_cart::find_def)
+            .is_some_and(|d| d.controller == ng_cart::types::Controller::Mahjong)
+    }
+
+    /// Le jeu courant utilise un trackball ou une molette.
+    fn is_pointer_game(&self) -> bool {
+        use ng_cart::types::Controller::{Dial, Trackball};
+        self.game
+            .as_deref()
+            .and_then(ng_cart::find_def)
+            .is_some_and(|d| matches!(d.controller, Trackball | Dial))
+    }
+
+    pub fn load_game(&mut self, name: &str) {
+        self.game = Some(name.to_string());
+        self.error = None;
+        self.stopped = false;
+        self.perf.reset();
+        self.send(Cmd::Load {
+            game: name.to_string(),
+        });
+    }
+
+    /// Arrête l'émulation : la machine est déchargée et l'image effacée.
+    fn stop_emulation(&mut self) {
+        if self.stopped || self.emu.is_none() {
+            return;
+        }
+        self.stopped = true;
+        self.paused = false;
+        self.send(Cmd::Stop);
+        if let Some(emu) = &self.emu {
+            while emu.rx.try_recv().is_ok() {}
+        }
+        self.last = None;
+        self.texture = None;
+        self.fx_tex = None;
+        self.shown = None;
+        self.perf.reset();
+    }
+
+    /// Redémarre à froid le dernier jeu chargé.
+    fn start_emulation(&mut self) {
+        if let Some(game) = self.game.clone() {
+            self.paused = false;
+            self.send(Cmd::Pause(false));
+            self.load_game(&game);
+        }
+    }
+
+    /// Volume : ajuste de `delta` points (0 à 100) et coupe le muet.
+    fn change_volume(&mut self, delta: i32) {
+        let v = i32::from(self.prefs.audio.volume) + delta;
+        self.prefs.audio.volume = v.clamp(0, 100) as u8;
+        self.prefs.audio.mute = false;
+    }
+
+    /// Modifie BIOS ou modèle : écrit `neogeo.toml`, informe le thread d'émulation et relance le
+    /// jeu courant avec la nouvelle configuration.
+    fn change_system(&mut self, edit: impl FnOnce(&mut Config)) {
+        let Some(cfg) = self.cfg.as_mut() else { return };
+        edit(cfg);
+        let cfg = cfg.clone();
+        let old = std::fs::read_to_string(&self.cfg_path).unwrap_or_default();
+        let text = bios_menu::updated_toml(&old, &cfg);
+        self.error = prefs::write_atomic(&self.cfg_path, &text)
+            .err()
+            .map(|e| format!("configuration non sauvegardée : {e}"));
+        self.bios = bios_menu::available_bios(&cfg);
+        self.send(Cmd::Config(cfg));
+        if let Some(game) = self.game.clone().filter(|_| !self.stopped) {
+            self.send(Cmd::Load { game });
+        }
+    }
+
+    fn texture_options(&self) -> egui::TextureOptions {
+        if self.prefs.display.smooth {
+            egui::TextureOptions::LINEAR
+        } else {
+            egui::TextureOptions::NEAREST
+        }
+    }
+
+    fn poll(&mut self, ctx: &egui::Context) {
+        let Some(emu) = &self.emu else { return };
+        let mut fresh = false;
+        while let Ok(f) = emu.rx.try_recv() {
+            // une trame déjà en route après l'arrêt est ignorée
+            if self.stopped {
+                continue;
+            }
+            self.perf.push_emu(f.ms);
+            self.perf.fps = f.fps;
+            self.perf.set_audio(f.audio_fill, f.underruns);
+            self.last = Some(f);
+            fresh = true;
+        }
+        while let Ok(e) = emu.err_rx.try_recv() {
+            self.error = Some(e);
+        }
+        while let Ok(s) = emu.dbg_rx.try_recv() {
+            self.debugger.set_snapshot(s);
+        }
+        let opts = self.texture_options();
+        if let Some(f) = self
+            .last
+            .as_ref()
+            .filter(|_| fresh || self.texture.is_none())
+        {
+            let img = to_color_image(&f.pixels);
+            match &mut self.texture {
+                Some(t) => t.set(img, opts),
+                None => self.texture = Some(ctx.load_texture("fb", img, opts)),
+            }
+        }
+    }
+
+    fn screenshot(&mut self) {
+        let (Some(cfg), Some(game), Some(f)) = (&self.cfg, &self.game, &self.last) else {
+            return;
+        };
+        let dir = cfg.saves_dir.join("shots");
+        let mut out = format!("P6\n{FB_W} {FB_H}\n255\n").into_bytes();
+        for p in &f.pixels {
+            out.extend_from_slice(&[(p >> 16) as u8, (p >> 8) as u8, *p as u8]);
+        }
+        let res = std::fs::create_dir_all(&dir)
+            .and_then(|()| std::fs::write(dir.join(menu::shot_name(game, f.frame)), out));
+        if let Err(e) = res {
+            self.error = Some(format!("capture impossible : {e}"));
+        }
+    }
+
+    fn set_paused(&mut self, p: bool) {
+        self.paused = p;
+        self.send(Cmd::Pause(p));
+    }
+
+    /// Avance d'une trame (met en pause si besoin).
+    fn step_frame(&mut self) {
+        if !self.paused {
+            self.set_paused(true);
+        }
+        self.send(Cmd::StepFrame);
+    }
+
+    /// Informe le thread d'émulation quand l'onglet visible demande d'autres données.
+    fn sync_debug_level(&mut self) {
+        let level = self.debugger.level();
+        if level != self.debug_level && self.emu.is_some() {
+            self.send(Cmd::Debug(level));
+            self.debug_level = level;
+        }
+    }
+
+    fn status_text(&self, cfg: &Config) -> String {
+        let scale = self.scale_info();
+        format_status(&StatusInfo {
+            game: self.game.as_deref(),
+            bios: Some(bios_menu::bios_label(&cfg.bios)),
+            model: Some(match cfg.model {
+                ng_cart::Model::Mvs => "MVS",
+                ng_cart::Model::Aes => "AES",
+            }),
+            ms: self
+                .perf
+                .avg(60)
+                .filter(|_| !self.paused && !self.stopped && self.last.is_some()),
+            // en pause la dernière mesure n'a plus de sens
+            fps: self.last.as_ref().filter(|_| !self.paused).map(|f| f.fps),
+            scale: self.shown.is_some().then_some(scale.as_str()),
+            paused: self.paused,
+            stopped: self.stopped,
+        })
+    }
+
+    fn handle(&mut self, ctx: &egui::Context, action: MenuAction) {
+        match action {
+            MenuAction::Load(g) => self.load_game(&g),
+            MenuAction::Quit => ctx.send_viewport_cmd(egui::ViewportCommand::Close),
+            MenuAction::Pause(p) => self.set_paused(p),
+            MenuAction::Reset => self.send(Cmd::Reset),
+            MenuAction::Scale(s) => self.prefs.display.scale = s,
+            MenuAction::Fullscreen(f) => self.prefs.display.fullscreen = f,
+            MenuAction::Aspect(a) => self.prefs.display.aspect = a,
+            MenuAction::Smooth(s) => {
+                self.prefs.display.smooth = s;
+                // la texture reprend ses options au prochain rafraîchissement
+                self.texture = None;
+            }
+            MenuAction::Screenshot => self.screenshot(),
+            MenuAction::SetBios(file) => self.change_system(|c| c.bios = file),
+            MenuAction::SetModel(m) => self.change_system(|c| c.model = m),
+            MenuAction::Controls => self.controls.open = true,
+            MenuAction::Dips => self.dips.open = true,
+            MenuAction::Filters => self.fx_win.open = true,
+            MenuAction::Stop => self.stop_emulation(),
+            MenuAction::Start => self.start_emulation(),
+            MenuAction::Volume(v) => {
+                self.prefs.audio.volume = v;
+                self.prefs.audio.mute = false;
+            }
+            MenuAction::Mute(m) => self.prefs.audio.mute = m,
+            MenuAction::Overlay(b) => self.prefs.overlay.enabled = b,
+            MenuAction::OverlayFull(f) => self.prefs.overlay.full = f,
+            MenuAction::OverlayCorner(c) => self.prefs.overlay.corner = c,
+            MenuAction::Debugger => self.debugger.open = !self.debugger.open,
+            MenuAction::DebugTab(t) => {
+                self.debugger.open = true;
+                self.debugger.tab = t;
+            }
+            MenuAction::Step => self.step_frame(),
+            MenuAction::StatusBar(b) => self.prefs.debug.show_status_bar = b,
+        }
+    }
+
+    /// Raccourcis de l'interface (inactifs pendant une capture de touche).
+    fn shortcuts(&mut self, ctx: &egui::Context) {
+        if self.controls.capturing() {
+            return;
+        }
+        let pressed = |k: Key| ctx.input(|i| i.key_pressed(k));
+        if pressed(Key::F11) {
+            self.prefs.display.fullscreen = !self.prefs.display.fullscreen;
+        }
+        if pressed(Key::Escape) && self.prefs.display.fullscreen {
+            self.prefs.display.fullscreen = false;
+        }
+        if pressed(Key::F1) {
+            self.controls.open = !self.controls.open;
+        }
+        if pressed(Key::F5) {
+            self.set_paused(!self.paused);
+        }
+        if pressed(Key::F6) {
+            self.step_frame();
+        }
+        if pressed(Key::F9) {
+            self.screenshot();
+        }
+        if pressed(Key::F12) {
+            self.debugger.open = !self.debugger.open;
+        }
+        if pressed(Key::F10) {
+            self.prefs.overlay.enabled = !self.prefs.overlay.enabled;
+        }
+        if pressed(Key::F8) {
+            if self.stopped {
+                self.start_emulation();
+            } else {
+                self.stop_emulation();
+            }
+        }
+        if pressed(Key::F7) {
+            self.prefs.audio.mute = !self.prefs.audio.mute;
+        }
+        if pressed(Key::F3) {
+            self.change_volume(-5);
+        }
+        if pressed(Key::F4) {
+            self.change_volume(5);
+        }
+    }
+
+    /// Applique le plein écran à la fenêtre quand le réglage change (et au démarrage).
+    fn apply_fullscreen(&mut self, ctx: &egui::Context) {
+        let want = self.prefs.display.fullscreen;
+        if self.fullscreen_applied != Some(want) {
+            // au démarrage, ne rien envoyer si la fenêtre doit rester fenêtrée
+            if want || self.fullscreen_applied.is_some() {
+                ctx.send_viewport_cmd(egui::ViewportCommand::Fullscreen(want));
+            }
+            self.fullscreen_applied = Some(want);
+        }
+        if want {
+            let idle = ctx.input(|i| i.pointer.time_since_last_movement());
+            if idle > CURSOR_HIDE_AFTER && !self.menu_shown {
+                ctx.set_cursor_icon(egui::CursorIcon::None);
+            }
+        }
+    }
+
+    /// Dessine la trame dans la zone centrale : fond noir, facteur entier, pixels nets.
+    fn draw_frame(&mut self, ui: &mut egui::Ui) {
+        let avail = ui.max_rect();
+        let Some(t) = &self.texture else {
+            self.shown = None;
+            ui.centered_and_justified(|ui| {
+                ui.label(if self.stopped {
+                    "Émulation arrêtée : Émulation > Démarrer (F8)"
+                } else {
+                    "Fichier > Ouvrir pour lancer un jeu"
+                });
+            });
+            return;
+        };
+        let d = &self.prefs.display;
+        let l = display::layout(avail, ui.pixels_per_point(), d.scale, d.aspect);
+        let uv = egui::Rect::from_min_max(egui::pos2(0.0, 0.0), egui::pos2(1.0, 1.0));
+        let fx = self.prefs.fx;
+        let mut tex_id = t.id();
+        if let (true, Some(f)) = (fx.is_active(), &self.last) {
+            // image filtrée à la taille finale ; recalculée seulement si trame, taille ou réglage changent
+            let key = FxKey {
+                frame: f.frame,
+                px: l.px,
+                fx,
+            };
+            if self.fx_tex.as_ref().map(|(k, _)| *k) != Some(key) {
+                let (w, h) = (l.px.0 as usize, l.px.1 as usize);
+                let t0 = std::time::Instant::now();
+                let img = egui::ColorImage {
+                    size: [w, h],
+                    source_size: egui::vec2(w as f32, h as f32),
+                    pixels: postfx::render(&f.pixels, &fx, w, h),
+                };
+                self.perf.smooth_fx(t0.elapsed().as_secs_f32() * 1000.0);
+                match &mut self.fx_tex {
+                    Some((k, t)) => {
+                        t.set(img, egui::TextureOptions::NEAREST);
+                        *k = key;
+                    }
+                    None => {
+                        let t = ui
+                            .ctx()
+                            .load_texture("fb_fx", img, egui::TextureOptions::NEAREST);
+                        self.fx_tex = Some((key, t));
+                    }
+                }
+            }
+            if let Some((_, t)) = &self.fx_tex {
+                tex_id = t.id();
+            }
+        }
+        if !fx.is_active() {
+            self.perf.fx_ms = None;
+        }
+        ui.painter_at(avail)
+            .image(tex_id, l.rect, uv, egui::Color32::WHITE);
+        self.shown = Some(l);
+    }
+
+    fn scale_info(&self) -> String {
+        self.shown
+            .as_ref()
+            .map_or_else(|| "–".to_string(), display::scale_label)
+    }
+
+    /// Sauvegarde `gui.toml` quand les préférences ont changé depuis la dernière écriture.
+    fn save_prefs_if_changed(&mut self) {
+        if self.prefs == self.saved {
+            return;
+        }
+        match self.prefs.save(&self.prefs_path) {
+            Ok(()) => {}
+            Err(e) => self.error = Some(format!("préférences non sauvegardées : {e}")),
+        }
+        // même en cas d'échec : ne pas réessayer à chaque trame
+        self.saved = self.prefs.clone();
+    }
+}
+
+impl eframe::App for App {
+    fn ui(&mut self, ui: &mut egui::Ui, _frame: &mut eframe::Frame) {
+        let ctx = ui.ctx().clone();
+        let Some(cfg) = self.cfg.clone() else {
+            egui::CentralPanel::default().show(ui, |ui| {
+                if let Some(cfg) = self.form.ui(ui, &self.cfg_path) {
+                    self.emu = Some(emu_thread::spawn(cfg.clone()));
+                    self.bios = bios_menu::available_bios(&cfg);
+                    self.error = missing_bios_message(&cfg, &self.bios);
+                    self.cfg = Some(cfg);
+                }
+            });
+            return;
+        };
+        self.poll(&ctx);
+        self.shortcuts(&ctx);
+        self.apply_fullscreen(&ctx);
+
+        self.input.update_keys(&ctx);
+        self.input.poll_gamepads();
+        let mahjong = self.is_mahjong();
+        let pointer = self.is_pointer_game();
+        let mut sens = self.prefs.input.mouse_sens.unwrap_or(100);
+        let dip = self.prefs.input.dipsw;
+        if self
+            .controls
+            .show(&ctx, &mut self.input, mahjong, pointer, &mut sens)
+        {
+            self.prefs.input = self.input.bindings.to_prefs();
+            self.prefs.input.mouse_sens = Some(sens);
+            self.prefs.input.dipsw = dip;
+        }
+        let mut dipsw = self.prefs.input.dipsw.unwrap_or(0xFF);
+        if self.dips.show(&ctx, &mut dipsw) {
+            self.prefs.input.dipsw = Some(dipsw);
+        }
+        self.send(Cmd::Dips(dipsw));
+        let a = &self.prefs.audio;
+        self.send(Cmd::Volume(audio::volume_gain(a.volume, a.mute)));
+        self.perf.smooth_ui(ctx.input(|i| i.unstable_dt) * 1000.0);
+        let mut fx = self.prefs.fx;
+        if self.fx_win.show(&ctx, &mut fx) {
+            self.prefs.fx = fx;
+        }
+        if pointer && !self.controls.capturing() {
+            let k = sens as f32 / 100.0;
+            // souris : seulement hors des menus et fenêtres egui
+            let d = if ctx.egui_wants_pointer_input() {
+                egui::Vec2::ZERO
+            } else {
+                ctx.input(|i| i.pointer.delta())
+            };
+            // `mouse_acc` garde les pixels pas encore convertis en impulsions.
+            self.mouse_acc += d;
+            let (dx, dy) = (
+                input::pointer_counts(self.mouse_acc.x, k),
+                input::pointer_counts(self.mouse_acc.y, k),
+            );
+            self.mouse_acc -= egui::vec2(dx as f32 / k, dy as f32 / k);
+            let (ax, ay) = input::arrows_motion(self.input.pads().0);
+            let (mx, my) = (dx + ax, dy + ay);
+            if mx != 0 || my != 0 {
+                self.send(Cmd::Motion { dx: mx, dy: my });
+            }
+        }
+        // pendant une capture de touche, rien n'est envoyé au jeu
+        if !self.controls.capturing() {
+            let (p1, p2) = self.input.pads();
+            self.send(Cmd::Inputs {
+                p1,
+                p2,
+                sys: self.input.system(),
+                mj: self.input.mahjong(mahjong),
+            });
+        }
+
+        let fullscreen = self.prefs.display.fullscreen;
+        self.menu_shown = !fullscreen
+            || menu_revealed(
+                self.menu_shown,
+                ctx.input(|i| i.pointer.latest_pos()).map(|p| p.y),
+                egui::Popup::is_any_open(&ctx),
+            );
+        if self.menu_shown {
+            let scale_info = self.scale_info();
+            let action = egui::Panel::top("menu")
+                .show(ui, |ui| {
+                    menu::show(
+                        ui,
+                        &MenuState {
+                            cfg: &cfg,
+                            paused: self.paused,
+                            display: &self.prefs.display,
+                            scale_info: &scale_info,
+                            bios: &self.bios,
+                            debug_open: self.debugger.open,
+                            debug_tab: self.debugger.tab,
+                            status_bar: self.prefs.debug.show_status_bar,
+                            volume: self.prefs.audio.volume,
+                            mute: self.prefs.audio.mute,
+                            stopped: self.stopped,
+                            has_game: self.game.is_some(),
+                            overlay: self.prefs.overlay,
+                        },
+                    )
+                })
+                .inner;
+            if let Some(a) = action {
+                self.handle(&ctx, a);
+            }
+        }
+        if let Some(e) = self.error.clone() {
+            egui::Panel::top("error").show(ui, |ui| {
+                ui.horizontal(|ui| {
+                    if ui.small_button("×").on_hover_text("Fermer").clicked() {
+                        self.error = None;
+                    }
+                    ui.colored_label(egui::Color32::LIGHT_RED, e);
+                });
+            });
+        }
+        if !fullscreen && self.prefs.debug.show_status_bar {
+            let text = self.status_text(&cfg);
+            egui::Panel::bottom("status").show(ui, |ui| {
+                ui.monospace(text);
+            });
+        }
+        if self.debugger.open {
+            // panneau ancré à droite : l'image du jeu reste entièrement visible à côté
+            let action = egui::Panel::right("debugger")
+                .resizable(true)
+                .default_size(DEBUG_PANEL_W)
+                .show(ui, |ui| self.debugger.ui(ui, self.paused))
+                .inner;
+            match action {
+                Some(DebugAction::Pause(p)) => self.set_paused(p),
+                Some(DebugAction::Step) => self.step_frame(),
+                None => {}
+            }
+        }
+        egui::CentralPanel::default()
+            .frame(egui::Frame::NONE.fill(egui::Color32::BLACK))
+            .show(ui, |ui| self.draw_frame(ui));
+
+        let state = if self.stopped {
+            RunState::Stopped
+        } else if self.paused {
+            RunState::Paused
+        } else {
+            RunState::Running
+        };
+        let scale = self
+            .shown
+            .as_ref()
+            .map(|d| format!("x{} {}x{}", d.factor, d.px.0, d.px.1));
+        let top = if self.menu_shown { 30.0 } else { 8.0 };
+        let bottom = if !fullscreen && self.prefs.debug.show_status_bar {
+            34.0
+        } else {
+            8.0
+        };
+        overlay::show(
+            &ctx,
+            &self.prefs.overlay,
+            &self.perf,
+            state,
+            scale.as_deref(),
+            (top, bottom),
+        );
+
+        self.sync_debug_level();
+        self.prefs.debug.open = self.debugger.open;
+        self.prefs.debug.tab = self.debugger.tab.name().to_string();
+        self.prefs.debug.region = self.debugger.region.name().to_string();
+        self.save_prefs_if_changed();
+        ctx.request_repaint();
+    }
+}
+
+impl Drop for App {
+    fn drop(&mut self) {
+        self.save_prefs_if_changed();
+        self.send(Cmd::Quit);
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn pixel_conversion() {
+        let mut px = vec![0u32; FB_W * FB_H];
+        px[0] = 0x00FF_8040;
+        let img = to_color_image(&px);
+        assert_eq!(img.pixels[0], egui::Color32::from_rgb(255, 128, 64));
+    }
+
+    #[test]
+    fn fullscreen_menu_reveal() {
+        assert!(!menu_revealed(false, Some(100.0), false));
+        assert!(menu_revealed(false, Some(3.0), false));
+        // une fois visible, elle reste tant que la souris est sur la barre ou qu'un menu est ouvert
+        assert!(menu_revealed(true, Some(20.0), false));
+        assert!(!menu_revealed(true, Some(40.0), false));
+        assert!(menu_revealed(false, Some(400.0), true));
+        assert!(!menu_revealed(true, None, false));
+    }
+}

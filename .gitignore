@@ -1,0 +1,5 @@
+target/
+saves/
+_to_delete/
+*.exe
+__pycache__/

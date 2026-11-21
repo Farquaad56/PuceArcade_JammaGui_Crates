@@ -1,0 +1,165 @@
+[
+  {
+    "id": "J000",
+    "title": "J000 Workspace Cargo vérifié, gate, métriques",
+    "phase": "J0 Contrat et mire",
+    "deps": [],
+    "file": "tasks/J000.md",
+    "assignee": "rust-dev",
+    "status": "todo"
+  },
+  {
+    "id": "J001",
+    "title": "J001 puce-jamma : contrat « connecteur JAMMA » (types, traits, utilitaires)",
+    "phase": "J0 Contrat et mire",
+    "deps": [
+      "J000"
+    ],
+    "file": "tasks/J001.md",
+    "assignee": "rust-dev",
+    "status": "todo"
+  },
+  {
+    "id": "J002",
+    "title": "J002 puce-jamma-testboard : carte de test (mire, entrées, bip, DIP, savestate, débogage)",
+    "phase": "J0 Contrat et mire",
+    "deps": [
+      "J001"
+    ],
+    "file": "tasks/J002.md",
+    "assignee": "rust-dev",
+    "status": "todo"
+  },
+  {
+    "id": "J100",
+    "title": "J100 puce-jamma-gui : placement de l'image (échelle entière/ajustée, rapport, rotation)",
+    "phase": "J1 Frontal",
+    "deps": [
+      "J002"
+    ],
+    "file": "tasks/J100.md",
+    "assignee": "rust-dev",
+    "status": "todo"
+  },
+  {
+    "id": "J101",
+    "title": "J101 puce-jamma-gui : scalers 2x (HQ2X, Eagle, 2xSaI, Scale2x…) — reprise",
+    "phase": "J1 Frontal",
+    "deps": [
+      "J100"
+    ],
+    "file": "tasks/J101.md",
+    "assignee": "rust-dev",
+    "status": "todo"
+  },
+  {
+    "id": "J102",
+    "title": "J102 puce-jamma-gui : filtres CRT (postfx : interpolation, scanlines, masques, presets) — reprise généralisée",
+    "phase": "J1 Frontal",
+    "deps": [
+      "J101"
+    ],
+    "file": "tasks/J102.md",
+    "assignee": "rust-dev",
+    "status": "todo"
+  },
+  {
+    "id": "J103",
+    "title": "J103 puce-jamma-gui : overlay de performances et barre d'état — reprise",
+    "phase": "J1 Frontal",
+    "deps": [
+      "J102"
+    ],
+    "file": "tasks/J103.md",
+    "assignee": "rust-dev",
+    "status": "todo"
+  },
+  {
+    "id": "J104",
+    "title": "J104 puce-jamma-gui : préférences (prefs.toml) — reprise",
+    "phase": "J1 Frontal",
+    "deps": [
+      "J103"
+    ],
+    "file": "tasks/J104.md",
+    "assignee": "rust-dev",
+    "status": "todo"
+  },
+  {
+    "id": "J105",
+    "title": "J105 puce-jamma-gui : thread d'émulation générique (commandes, cadence, savestates, captures)",
+    "phase": "J1 Frontal",
+    "deps": [
+      "J104"
+    ],
+    "file": "tasks/J105.md",
+    "assignee": "rust-dev",
+    "status": "todo"
+  },
+  {
+    "id": "J106",
+    "title": "J106 puce-jamma-gui : son (cpal, rééchantillonnage, régulation de dérive) — reprise",
+    "phase": "J1 Frontal",
+    "deps": [
+      "J105"
+    ],
+    "file": "tasks/J106.md",
+    "assignee": "rust-dev",
+    "status": "todo"
+  },
+  {
+    "id": "J107",
+    "title": "J107 puce-jamma-gui : commandes JAMMA (clavier, manettes, configuration) — reprise",
+    "phase": "J1 Frontal",
+    "deps": [
+      "J106"
+    ],
+    "file": "tasks/J107.md",
+    "assignee": "rust-dev",
+    "status": "todo"
+  },
+  {
+    "id": "J108",
+    "title": "J108 puce-jamma-gui : menus (jeux du driver, DIP décrits, filtres, commandes, états, captures)",
+    "phase": "J1 Frontal",
+    "deps": [
+      "J107"
+    ],
+    "file": "tasks/J108.md",
+    "assignee": "rust-dev",
+    "status": "todo"
+  },
+  {
+    "id": "J109",
+    "title": "J109 puce-jamma-gui : application et point d'entrée `run()` + exemple sur la mire",
+    "phase": "J1 Frontal",
+    "deps": [
+      "J108"
+    ],
+    "file": "tasks/J109.md",
+    "assignee": "rust-dev",
+    "status": "todo"
+  },
+  {
+    "id": "J110",
+    "title": "J110 puce-jamma-gui : débogueur générique (CPU, mémoire, registres matériels, images, couches)",
+    "phase": "J1 Frontal",
+    "deps": [
+      "J109"
+    ],
+    "file": "tasks/J110.md",
+    "assignee": "rust-dev",
+    "status": "todo"
+  },
+  {
+    "id": "J200",
+    "title": "J200 Guide d'intégration, README, version v0.1.0",
+    "phase": "J2 Publication",
+    "deps": [
+      "J110"
+    ],
+    "file": "tasks/J200.md",
+    "assignee": "rust-dev",
+    "status": "todo"
+  }
+]

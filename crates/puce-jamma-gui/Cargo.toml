@@ -1,0 +1,22 @@
+[package]
+name = "puce-jamma-gui"
+description = "Frontal egui réutilisable pour cartes JAMMA émulées (filtres, overlay, son, manettes, DIP, débogueur)"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+puce-jamma = { path = "../puce-jamma" }
+cpal = "0.18.2"
+crossbeam-channel = "0.5.17"
+eframe = "0.37.0"
+gilrs = "0.11.2"
+rfd = "0.18.0"
+png = "0.18.1"
+toml = { version = "0.8", default-features = false, features = ["parse", "display"] }
+
+[dev-dependencies]
+puce-jamma-testboard = { path = "../puce-jamma-testboard" }
+
+[[example]]
+name = "testboard"
