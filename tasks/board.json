@@ -87,7 +87,7 @@
   },
   {
     "id": "J105",
-    "title": "J105 puce-jamma-gui : thread d'émulation générique (commandes, cadence, savestates, captures)",
+    "title": "J105 puce-jamma-gui : boucle d'émulation (1/2) — step_once, cadence, captures PNG",
     "phase": "J1 Frontal",
     "deps": [
       "J104"
@@ -97,11 +97,22 @@
     "status": "todo"
   },
   {
+    "id": "J105b",
+    "title": "J105b puce-jamma-gui : boucle d'émulation (2/2) — thread, commandes, cadence, savestates",
+    "phase": "J1 Frontal",
+    "deps": [
+      "J105"
+    ],
+    "file": "tasks/J105b.md",
+    "assignee": "rust-dev",
+    "status": "todo"
+  },
+  {
     "id": "J106",
     "title": "J106 puce-jamma-gui : son (cpal, rééchantillonnage, régulation de dérive) — reprise",
     "phase": "J1 Frontal",
     "deps": [
-      "J105"
+      "J105b"
     ],
     "file": "tasks/J106.md",
     "assignee": "rust-dev",
@@ -109,7 +120,7 @@
   },
   {
     "id": "J107",
-    "title": "J107 puce-jamma-gui : commandes JAMMA (clavier, manettes, configuration) — reprise",
+    "title": "J107 puce-jamma-gui : commandes JAMMA (1/2) — actions, touches par défaut, clavier -> JammaInputs",
     "phase": "J1 Frontal",
     "deps": [
       "J106"
@@ -119,11 +130,22 @@
     "status": "todo"
   },
   {
+    "id": "J107b",
+    "title": "J107b puce-jamma-gui : commandes JAMMA (2/2) — manettes gilrs, préférences, fenêtre de configuration",
+    "phase": "J1 Frontal",
+    "deps": [
+      "J107"
+    ],
+    "file": "tasks/J107b.md",
+    "assignee": "rust-dev",
+    "status": "todo"
+  },
+  {
     "id": "J108",
     "title": "J108 puce-jamma-gui : menus (jeux du driver, DIP décrits, filtres, commandes, états, captures)",
     "phase": "J1 Frontal",
     "deps": [
-      "J107"
+      "J107b"
     ],
     "file": "tasks/J108.md",
     "assignee": "rust-dev",
@@ -131,7 +153,7 @@
   },
   {
     "id": "J109",
-    "title": "J109 puce-jamma-gui : application et point d'entrée `run()` + exemple sur la mire",
+    "title": "J109 puce-jamma-gui : application (1/2) — boucle egui (image, rotation, filtres, overlay, son, entrées)",
     "phase": "J1 Frontal",
     "deps": [
       "J108"
@@ -141,13 +163,35 @@
     "status": "todo"
   },
   {
-    "id": "J110",
-    "title": "J110 puce-jamma-gui : débogueur générique (CPU, mémoire, registres matériels, images, couches)",
+    "id": "J109b",
+    "title": "J109b puce-jamma-gui : application (2/2) — point d'entrée run(), options, exemple sur la mire",
     "phase": "J1 Frontal",
     "deps": [
       "J109"
     ],
+    "file": "tasks/J109b.md",
+    "assignee": "rust-dev",
+    "status": "todo"
+  },
+  {
+    "id": "J110",
+    "title": "J110 puce-jamma-gui : débogueur (1/2) — lecture mémoire, fenêtres CPU et mémoire, pas à pas",
+    "phase": "J1 Frontal",
+    "deps": [
+      "J109b"
+    ],
     "file": "tasks/J110.md",
+    "assignee": "rust-dev",
+    "status": "todo"
+  },
+  {
+    "id": "J110b",
+    "title": "J110b puce-jamma-gui : débogueur (2/2) — registres matériels, images de débogage, couches",
+    "phase": "J1 Frontal",
+    "deps": [
+      "J110"
+    ],
+    "file": "tasks/J110b.md",
     "assignee": "rust-dev",
     "status": "todo"
   },
@@ -156,7 +200,7 @@
     "title": "J200 Guide d'intégration, README, version v0.1.0",
     "phase": "J2 Publication",
     "deps": [
-      "J110"
+      "J110b"
     ],
     "file": "tasks/J200.md",
     "assignee": "rust-dev",
