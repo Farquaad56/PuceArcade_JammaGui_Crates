@@ -12,10 +12,15 @@ use crate::video_debug::VideoDebug;
 #[derive(Clone, Debug, PartialEq)]
 pub enum DebugAction {
     Pause(bool),
-    Step,
+    /// Une instruction du CPU sélectionné.
+    Step(usize),
     FrameAdvance,
     LayerMask(u32),
-    Peek { cpu: usize, addr: u32, len: usize },
+    Peek {
+        cpu: usize,
+        addr: u32,
+        len: usize,
+    },
 }
 
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
@@ -160,7 +165,7 @@ impl Debugger {
                 .on_hover_text("Une instruction du CPU sélectionné")
                 .clicked()
             {
-                action = Some(DebugAction::Step);
+                action = Some(DebugAction::Step(self.cpu));
             }
             if ui.button("Image").on_hover_text("Une trame").clicked() {
                 action = Some(DebugAction::FrameAdvance);
@@ -173,7 +178,7 @@ impl Debugger {
         });
         ui.separator();
         if self.snap.cpus.is_empty() && self.snap.registers.is_empty() {
-            ui.weak("Mettez en pause puis faites un pas pour obtenir l'état de la carte.");
+            ui.weak("En attente de l'état de la carte…");
         }
         let a = match self.tab {
             Tab::Cpu => {
@@ -191,19 +196,31 @@ impl Debugger {
     }
 
     fn cpu_tab(&mut self, ui: &mut egui::Ui) {
+        if self.snap.cpus.len() > 1 {
+            ui.horizontal(|ui| {
+                ui.label("Pas sur :");
+                for (i, c) in self.snap.cpus.iter().enumerate() {
+                    ui.radio_value(&mut self.cpu, i, &c.name);
+                }
+            });
+            ui.separator();
+        }
         for (i, c) in self.snap.cpus.iter().enumerate() {
-            ui.strong(format!(
-                "{}  PC={}",
-                c.name,
-                format_reg(c.pc, c.address_bits)
-            ));
+            let head = format!("{}  PC={}", c.name, format_reg(c.pc, c.address_bits));
+            if i == self.cpu {
+                ui.strong(egui::RichText::new(head).color(egui::Color32::LIGHT_GREEN));
+            } else {
+                ui.strong(head);
+            }
+            // largeur d'affichage des registres : 16 bits pour un CPU 8 bits (bus 16 bits)
+            let bits = if c.address_bits <= 16 { 16 } else { 32 };
             egui::Grid::new(("cpu", i))
                 .num_columns(4)
                 .striped(true)
                 .show(ui, |ui| {
                     for (n, (name, v)) in c.registers.iter().enumerate() {
                         ui.monospace(name);
-                        ui.monospace(format_reg(*v, 32));
+                        ui.monospace(format_reg(*v, bits));
                         if n % 2 == 1 {
                             ui.end_row();
                         }

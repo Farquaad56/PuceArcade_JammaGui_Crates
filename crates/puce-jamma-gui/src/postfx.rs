@@ -70,16 +70,18 @@ pub struct Fx {
     /// Hauteur de la barre en % de l'image (2 à 50).
     pub sweep_width: u8,
     /// Faisceau au ralenti : durée d'un balayage complet en dixièmes de seconde
-    /// (0 = désactivé, 1 à 100). L'image se redessine ligne par ligne ; chaque ligne garde
-    /// l'image de son dernier passage et s'éteint selon la persistance du phosphore.
+    /// (0 = désactivé, 1 à 100). L'image se redessine ligne de jeu par ligne de jeu ; chaque
+    /// ligne garde l'image de son dernier passage et s'éteint jusqu'au passage suivant.
     pub beam: u8,
-    /// Persistance du phosphore en % (0 = très courte, 100 = une ligne reste claire
-    /// pendant tout un balayage).
-    pub phosphor: u8,
+    /// Extinction des lignes derrière le faisceau, en % du balayage (5 = s'éteint presque tout
+    /// de suite, 100 = reste claire pendant tout le balayage).
+    pub beam_decay: u8,
     /// Luminosité minimale d'une ligne avant le passage suivant, en %.
     pub beam_floor: u8,
-    /// Rémanence entre images, en % (0 = aucune, 90 au plus) : traînées des objets mobiles.
-    pub ghost: u8,
+    /// Persistance du phosphore en millisecondes (0 = désactivée, 200 au plus) : temps pour que
+    /// la lumière d'un point tombe à 37 % ; traînées des objets mobiles. Phosphore type P22 :
+    /// le rouge persiste le plus, le bleu le moins.
+    pub persist: u8,
 }
 
 impl Default for Fx {
@@ -105,9 +107,9 @@ impl Default for Fx {
             sweep_speed: 40,
             sweep_width: 12,
             beam: 0,
-            phosphor: 30,
-            beam_floor: 25,
-            ghost: 0,
+            beam_decay: 35,
+            beam_floor: 15,
+            persist: 0,
         }
     }
 }
@@ -210,7 +212,7 @@ impl Fx {
 
     /// Faisceau au ralenti ou rémanence actifs (effets qui dépendent des images précédentes).
     pub fn phosphor_active(&self) -> bool {
-        self.beam > 0 || self.ghost > 0
+        self.beam > 0 || self.persist > 0
     }
 
     /// Mêmes réglages, tube remis à neutre (les préréglages d'écran ne touchent pas au tube).
@@ -228,9 +230,9 @@ impl Fx {
             sweep_speed: d.sweep_speed,
             sweep_width: d.sweep_width,
             beam: 0,
-            phosphor: d.phosphor,
+            beam_decay: d.beam_decay,
             beam_floor: d.beam_floor,
-            ghost: 0,
+            persist: 0,
             ..*self
         }
     }
@@ -249,9 +251,9 @@ impl Fx {
             sweep_speed: other.sweep_speed,
             sweep_width: other.sweep_width,
             beam: other.beam,
-            phosphor: other.phosphor,
+            beam_decay: other.beam_decay,
             beam_floor: other.beam_floor,
-            ghost: other.ghost,
+            persist: other.persist,
             ..*self
         }
     }
@@ -614,24 +616,56 @@ pub fn sweep_gains(fx: &Fx, h: usize, frame: u64) -> Vec<u32> {
 }
 
 /// Écran à phosphore : effets qui dépendent des images précédentes (faisceau au ralenti,
-/// rémanence). À appliquer après `render`, une fois par image affichée.
+/// persistance). Appliqué à l'image du jeu (résolution d'origine, 0x00RRGGBB) AVANT `render`,
+/// pour que scanlines et masque se posent ensuite par-dessus ; calculs en lumière linéaire.
 #[derive(Default)]
 pub struct Phosphor {
     w: usize,
     h: usize,
-    /// Contenu de chaque ligne tel que le faisceau l'a dessiné à son dernier passage.
-    screen: Vec<Color32>,
+    /// Faisceau : contenu de chaque ligne (linéaire) à son dernier passage.
+    screen: Vec<[f32; 3]>,
     /// Instant du dernier passage de chaque ligne, en balayages.
     row_time: Vec<f32>,
-    /// Image affichée précédente (rémanence).
-    last_out: Vec<Color32>,
     /// Temps courant en balayages ; position du faisceau = partie fractionnaire.
     t: f32,
+    /// Persistance : lumière restante de chaque point (linéaire).
+    glow: Vec<[f32; 3]>,
+    /// Dernier résultat (une trame déjà traitée n'est pas retraitée).
+    last: Vec<u32>,
     last_frame: Option<u64>,
 }
 
-/// Trames par seconde supposées pour le faisceau au ralenti.
-const BEAM_FPS: f32 = 60.0;
+/// Trames par seconde supposées (faisceau au ralenti, persistance).
+const PHOSPHOR_FPS: f32 = 60.0;
+/// Persistance relative des trois phosphores (P22 : rouge > vert > bleu).
+const P22: [f32; 3] = [1.0, 0.75, 0.35];
+const GAMMA: f32 = 2.2;
+
+fn lin_table() -> &'static ([f32; 256], Vec<u8>) {
+    static T: OnceLock<([f32; 256], Vec<u8>)> = OnceLock::new();
+    T.get_or_init(|| {
+        let to = std::array::from_fn(|v| (v as f32 / 255.0).powf(GAMMA));
+        let from = (0..=4096)
+            .map(|i| (255.0 * (i as f32 / 4096.0).powf(1.0 / GAMMA)).round() as u8)
+            .collect();
+        (to, from)
+    })
+}
+
+fn to_lin(p: u32) -> [f32; 3] {
+    let t = &lin_table().0;
+    [
+        t[(p >> 16 & 0xFF) as usize],
+        t[(p >> 8 & 0xFF) as usize],
+        t[(p & 0xFF) as usize],
+    ]
+}
+
+fn from_lin(c: [f32; 3]) -> u32 {
+    let f = &lin_table().1;
+    let e = |v: f32| u32::from(f[(v.clamp(0.0, 1.0) * 4096.0) as usize]);
+    e(c[0]) << 16 | e(c[1]) << 8 | e(c[2])
+}
 
 impl Phosphor {
     /// Oublie l'état (changement de taille, de jeu, effets désactivés).
@@ -639,73 +673,94 @@ impl Phosphor {
         *self = Phosphor::default();
     }
 
-    /// Applique faisceau et rémanence à `img` (sortie de `render`, `w` × `h`).
-    pub fn apply(&mut self, img: &mut [Color32], w: usize, h: usize, fx: &Fx, frame: u64) {
-        if !fx.phosphor_active() || w == 0 || h == 0 {
+    /// Applique faisceau et persistance à l'image du jeu `img` (`w` × `h`, 0x00RRGGBB).
+    pub fn apply(&mut self, img: &mut [u32], w: usize, h: usize, fx: &Fx, frame: u64) {
+        if !fx.phosphor_active() || w == 0 || h == 0 || img.len() < w * h {
             self.clear();
             return;
         }
-        let stale = self.w != w
-            || self.h != h
-            || self.last_frame.is_none_or(|f| frame < f)
-            || (fx.beam > 0) != !self.screen.is_empty();
-        if stale {
+        if self.w != w || self.h != h || self.last_frame.is_some_and(|f| frame < f) {
             self.clear();
+        }
+        if self.last_frame == Some(frame) && self.last.len() == w * h {
+            // même trame (fenêtre redimensionnée, réglage modifié en pause) : même résultat
+            img[..w * h].copy_from_slice(&self.last);
+            return;
+        }
+        let dt = self.last_frame.map_or(0, |f| frame - f) as f32;
+        if self.w == 0 {
             self.w = w;
             self.h = h;
-            if fx.beam > 0 {
-                // écran déjà entièrement dessiné il y a un balayage
-                self.screen = img.to_vec();
-                self.row_time = (0..h).map(|y| y as f32 / h as f32 - 1.0).collect();
-            }
-            self.last_frame = Some(frame);
         }
+        let mut lin: Vec<[f32; 3]> = img[..w * h].iter().map(|&p| to_lin(p)).collect();
         if fx.beam > 0 {
-            self.beam(img, w, h, fx, frame);
+            self.beam(&mut lin, w, h, fx, dt);
+        } else {
+            self.screen.clear();
         }
-        if fx.ghost > 0 && self.last_out.len() == img.len() {
-            let k = u32::from(fx.ghost.min(90)) * 256 / 100;
-            for (o, p) in img.iter_mut().zip(&self.last_out) {
-                let f = |a: u8, b: u8| a.max(((u32::from(b) * k) >> 8) as u8);
-                *o = Color32::from_rgb(f(o.r(), p.r()), f(o.g(), p.g()), f(o.b(), p.b()));
-            }
+        if fx.persist > 0 {
+            self.persist(&mut lin, fx, dt);
+        } else {
+            self.glow.clear();
         }
-        self.last_out.clear();
-        self.last_out.extend_from_slice(img);
+        for (o, c) in img.iter_mut().zip(&lin) {
+            *o = from_lin(*c);
+        }
+        self.last.clear();
+        self.last.extend_from_slice(&img[..w * h]);
         self.last_frame = Some(frame);
     }
 
-    fn beam(&mut self, img: &mut [Color32], w: usize, h: usize, fx: &Fx, frame: u64) {
-        let scan_frames = (f32::from(fx.beam.min(100)) / 10.0 * BEAM_FPS).max(1.0);
-        let dt = (frame - self.last_frame.unwrap_or(frame)) as f32 / scan_frames;
+    fn beam(&mut self, lin: &mut [[f32; 3]], w: usize, h: usize, fx: &Fx, dt: f32) {
+        if self.screen.len() != w * h {
+            // écran déjà entièrement dessiné il y a un balayage : le faisceau part du haut
+            self.screen = lin.to_vec();
+            self.row_time = (0..h).map(|y| (y as f32 + 0.5) / h as f32 - 1.0).collect();
+            self.t = 0.0;
+        }
+        let scan_frames = (f32::from(fx.beam.min(100)) / 10.0 * PHOSPHOR_FPS).max(1.0);
         let t0 = self.t;
-        let t1 = t0 + dt.min(1.0);
-        // lignes balayées entre t0 et t1 : redessinées avec l'image courante
+        let t1 = t0 + (dt / scan_frames).min(1.0);
         let (a, b) = (
             (t0 * h as f32).floor() as i64,
             (t1 * h as f32).floor() as i64,
         );
         for line in a..b {
             let y = line.rem_euclid(h as i64) as usize;
-            self.screen[y * w..(y + 1) * w].copy_from_slice(&img[y * w..(y + 1) * w]);
+            self.screen[y * w..(y + 1) * w].copy_from_slice(&lin[y * w..(y + 1) * w]);
             self.row_time[y] = (line as f32 + 0.5) / h as f32;
         }
         self.t = t1;
-        // luminosité selon le temps écoulé depuis le passage, plus éclat à la tête du faisceau
-        let tau = 0.02 + 0.98 * f32::from(fx.phosphor.min(100)) / 100.0;
+        let tau = f32::from(fx.beam_decay.clamp(5, 100)) / 100.0;
         let floor = f32::from(fx.beam_floor.min(100)) / 100.0;
         for y in 0..h {
             let age = (t1 - self.row_time[y]).max(0.0);
-            let v = floor + (1.0 - floor) * (-age / tau).exp();
-            let head = if age * (h as f32) < 2.0 { 1.25 } else { 1.0 };
-            let g = (v * head * 256.0).round() as u32;
-            let (src, dst) = (
-                &self.screen[y * w..(y + 1) * w],
-                &mut img[y * w..(y + 1) * w],
-            );
-            for (o, p) in dst.iter_mut().zip(src) {
-                let f = |c: u8| ((u32::from(c) * g) >> 8).min(255) as u8;
-                *o = Color32::from_rgb(f(p.r()), f(p.g()), f(p.b()));
+            let mut v = floor + (1.0 - floor) * (-age / tau).exp();
+            // la ligne que le faisceau vient de tracer est la plus vive (éclat du spot)
+            if age * (h as f32) < 1.0 {
+                v *= 1.35;
+            }
+            for (o, c) in lin[y * w..(y + 1) * w]
+                .iter_mut()
+                .zip(&self.screen[y * w..(y + 1) * w])
+            {
+                *o = [c[0] * v, c[1] * v, c[2] * v];
+            }
+        }
+    }
+
+    fn persist(&mut self, lin: &mut [[f32; 3]], fx: &Fx, dt: f32) {
+        if self.glow.len() != lin.len() {
+            self.glow = lin.to_vec();
+            return;
+        }
+        let tau_ms = f32::from(fx.persist.min(200));
+        let ms = dt * 1000.0 / PHOSPHOR_FPS;
+        let d: [f32; 3] = std::array::from_fn(|c| (-ms / (tau_ms * P22[c])).exp());
+        for (o, g) in lin.iter_mut().zip(self.glow.iter_mut()) {
+            for c in 0..3 {
+                g[c] = o[c].max(g[c] * d[c]);
+                o[c] = g[c];
             }
         }
     }
@@ -750,82 +805,96 @@ fn tube(out: &mut [Color32], w: usize, h: usize, fx: &Fx, frame: u64) {
 #[cfg(test)]
 mod tests {
 
-    fn solid(n: usize, c: Color32) -> Vec<Color32> {
-        vec![c; n]
+    fn r(p: u32) -> u32 {
+        p >> 16 & 0xFF
+    }
+    fn b(p: u32) -> u32 {
+        p & 0xFF
     }
 
     #[test]
     fn beam_redraws_line_by_line() {
-        // faisceau : 1 s par image = 60 trames ; image 4 × 60 (une ligne par trame)
+        // faisceau : 1 s par image = 60 trames ; image du jeu 4 × 60 (une ligne par trame)
         let fx = Fx {
             beam: 10,
-            phosphor: 100,
+            beam_decay: 100,
             beam_floor: 0,
             ..Fx::default()
         };
         let (w, h) = (4, 60);
         let mut ph = Phosphor::default();
-        let mut img = solid(w * h, Color32::from_rgb(200, 0, 0));
+        let mut img = vec![0x00C8_0000u32; w * h];
         ph.apply(&mut img, w, h, &fx, 0); // écran initial rouge
-                                          // 30 trames plus tard avec une image bleue : seule la moitié haute est redessinée
-        let mut img = solid(w * h, Color32::from_rgb(0, 0, 200));
-        ph.apply(&mut img, w, h, &fx, 30);
+        let mut img = vec![0x0000_00C8u32; w * h];
+        ph.apply(&mut img, w, h, &fx, 30); // 30 trames plus tard, image bleue
         assert!(
-            img[10 * w].b() > 0 && img[10 * w].r() == 0,
+            b(img[10 * w]) > 0 && r(img[10 * w]) == 0,
             "haut redessiné en bleu"
         );
         assert!(
-            img[50 * w].r() > 0 && img[50 * w].b() == 0,
+            r(img[50 * w]) > 0 && b(img[50 * w]) == 0,
             "bas encore rouge"
         );
-        // la ligne juste derrière le faisceau est plus claire que la plus ancienne
-        assert!(img[28 * w].b() > img[0].b());
         assert!(
-            img[31 * w].r() < img[59 * w].r(),
+            b(img[28 * w]) > b(img[0]),
+            "plus vif juste derrière le faisceau"
+        );
+        assert!(
+            r(img[31 * w]) < r(img[59 * w]),
             "le rouge du bas s'éteint vers le faisceau"
         );
+        // même trame redemandée : même résultat
+        let again = img.clone();
+        let mut img2 = vec![0x0000_00C8u32; w * h];
+        ph.apply(&mut img2, w, h, &fx, 30);
+        assert_eq!(img2, again);
         // un balayage complet plus tard : tout est bleu
-        let mut img = solid(w * h, Color32::from_rgb(0, 0, 200));
+        let mut img = vec![0x0000_00C8u32; w * h];
         ph.apply(&mut img, w, h, &fx, 90);
-        assert!(img.iter().all(|p| p.r() == 0));
+        assert!(img.iter().all(|&p| r(p) == 0));
     }
 
     #[test]
     fn beam_floor_keeps_old_lines_visible() {
         let fx = Fx {
             beam: 10,
-            phosphor: 0,
+            beam_decay: 5,
             beam_floor: 50,
             ..Fx::default()
         };
         let (w, h) = (2, 60);
         let mut ph = Phosphor::default();
-        let mut img = solid(w * h, Color32::from_gray(200));
+        let mut img = vec![0x00FF_FFFFu32; w * h];
         ph.apply(&mut img, w, h, &fx, 0);
-        let mut img = solid(w * h, Color32::from_gray(200));
+        let mut img = vec![0x00FF_FFFFu32; w * h];
         ph.apply(&mut img, w, h, &fx, 30);
-        // persistance très courte : les lignes anciennes tombent au plancher (50 %)
-        assert_eq!(img[59 * w].r(), 100);
+        // lignes anciennes au plancher : 50 % de la lumière, soit 255 × 0,5^(1/2,2) ≈ 186
+        assert!((184..=188).contains(&r(img[59 * w])), "{}", r(img[59 * w]));
     }
 
     #[test]
-    fn ghost_trails() {
+    fn persistence_fades_blue_first() {
         let fx = Fx {
-            ghost: 50,
+            persist: 50,
             ..Fx::default()
         };
         assert!(fx.phosphor_active() && fx.is_active());
         let mut ph = Phosphor::default();
-        let mut a = vec![Color32::BLACK, Color32::WHITE];
+        let mut a = vec![0x00FF_FFFFu32, 0];
         ph.apply(&mut a, 2, 1, &fx, 0);
-        let mut b = vec![Color32::WHITE, Color32::BLACK];
-        ph.apply(&mut b, 2, 1, &fx, 1);
-        assert_eq!(b[0], Color32::WHITE);
-        assert_eq!(b[1].r(), 127, "traînée à 50 %");
-        // retour en arrière (chargement d'état) : état oublié, pas de traînée
-        let mut c = vec![Color32::BLACK, Color32::BLACK];
-        ph.apply(&mut c, 2, 1, &fx, 0);
-        assert_eq!(c[0], Color32::BLACK);
+        let mut c = vec![0u32, 0];
+        ph.apply(&mut c, 2, 1, &fx, 1); // le point blanc s'est éteint
+        let (rr, gg, bb) = (r(c[0]), c[0] >> 8 & 0xFF, b(c[0]));
+        assert!(rr > gg && gg > bb && bb > 0, "{rr} {gg} {bb}");
+        assert!(rr < 255);
+        // 10 trames (167 ms, plus de 3 fois la persistance) plus tard : presque éteint
+        let mut c = vec![0u32, 0];
+        ph.apply(&mut c, 2, 1, &fx, 11);
+        assert!(r(c[0]) < 90, "{}", r(c[0]));
+        // retour en arrière (chargement d'état) : état oublié
+        let mut z = vec![0u32, 0];
+        ph.apply(&mut z, 2, 1, &fx, 0);
+        assert_eq!(z[0], 0);
     }
 
     #[test]

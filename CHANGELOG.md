@@ -9,15 +9,21 @@
     parfaite » et « Tube fatigué » ;
   - barre de balayage : bande claire qui descend l'écran avec une traînée sombre, intensité, durée d'un passage
     (0,5 à 10 s) et hauteur réglables.
-  - faisceau et phosphore : faisceau au ralenti (0,1 à 10 s par image) qui redessine l'image ligne par ligne ;
-    chaque ligne garde l'image de son dernier passage et s'éteint selon la persistance du phosphore, jusqu'à une
-    luminosité minimale réglable ; le jeu continue en temps réel ;
-  - rémanence entre images (0 à 90 %) : traînées derrière les objets qui bougent.
+  - persistance du phosphore (0 à 200 ms, type P22 : rouge plus long, bleu plus court) : traînées des objets
+    mobiles, en lumière linéaire ;
+  - faisceau au ralenti (0,1 à 10 s par image) qui redessine l'image ligne de jeu par ligne de jeu ; chaque ligne
+    garde l'image de son dernier passage et s'éteint (extinction et luminosité minimale réglables) ; le jeu continue
+    en temps réel. Ces deux effets sont calculés sur l'image du jeu, avant agrandissement, scanlines et masque.
 - API : `Fx` gagne `red`, `green`, `blue`, `conv_rx`, `conv_ry`, `conv_bx`, `conv_by`, `sweep`, `sweep_speed`,
-  `sweep_width`, `beam`, `phosphor`, `beam_floor`, `ghost` ; `postfx::Phosphor` (état entre deux images,
+  `sweep_width`, `beam`, `beam_decay`, `beam_floor`, `persist` ; `postfx::Phosphor` (état entre deux images,
   `apply` après `render`) ; `postfx::render` prend le numéro de trame (position de la barre) ; `postfx::sweep_gains`,
   `Fx::tube_active`, `Fx::without_tube`, `Fx::with_tube_of`.
-- Exemple `fx_demo` : aperçu des filtres sur une image PNG.
+- Débogueur : état de la carte rafraîchi en continu quand le panneau est ouvert (≈ 6 fois par seconde, à la
+  mise en pause et au chargement ; `Cmd::DebugLive`), « Pas » sur le CPU choisi (`Cmd::Step(cpu)`), mémoire relue
+  à chaque instantané, registres des CPU 8 bits sur 16 bits.
+- Overlay de performances placé dans la zone de l'image et sous les fenêtres (il ne recouvre plus les fenêtres,
+  le panneau du débogueur ni la barre d'état).
+- Exemple `fx_demo` : aperçu des filtres sur une image PNG (faisceau, traînées).
 
 ## v0.1.0
 

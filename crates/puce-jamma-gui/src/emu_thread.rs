@@ -23,8 +23,11 @@ pub enum Cmd {
     Dips(Vec<u8>),
     SaveState(u8),
     LoadState(u8),
-    /// En pause : une instruction du CPU 0 (si la carte a un débogueur), puis instantané de débogage.
-    Step,
+    /// En pause : une instruction du CPU donné (si la carte a un débogueur), puis instantané de débogage.
+    Step(usize),
+    /// Débogueur ouvert : instantanés envoyés régulièrement en marche (≈ 6 par seconde),
+    /// à la mise en pause et dès l'activation.
+    DebugLive(bool),
     /// En pause : une trame, puis instantané de débogage.
     FrameAdvance,
     /// Couches visibles (débogueur), bit n = couche n.

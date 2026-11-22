@@ -108,11 +108,11 @@ impl App {
     pub(crate) fn debug_action(&mut self, action: Option<DebugAction>) {
         match action {
             Some(DebugAction::Pause(p)) => self.set_paused(p),
-            Some(DebugAction::Step) => {
+            Some(DebugAction::Step(cpu)) => {
                 if !self.paused {
                     self.set_paused(true);
                 }
-                self.send(Cmd::Step);
+                self.send(Cmd::Step(cpu));
             }
             Some(DebugAction::FrameAdvance) => {
                 if !self.paused {
@@ -136,12 +136,8 @@ impl App {
             .layout
             .as_ref()
             .map(|d| format!("x{} {}x{}", d.factor, d.px.0, d.px.1));
-        let fullscreen = self.prefs.display.fullscreen;
-        let top = if fullscreen { 8.0 } else { 30.0 };
-        let bottom = if !fullscreen && self.prefs.debug.show_status_bar {
-            34.0
-        } else {
-            8.0
+        let Some(area) = self.central_rect else {
+            return;
         };
         overlay::show(
             ctx,
@@ -149,7 +145,7 @@ impl App {
             &self.perf,
             state,
             scale.as_deref(),
-            (top, bottom),
+            area,
         );
     }
 }

@@ -7,7 +7,7 @@ qui accepte n'importe quelle carte.
 |---|---|
 | `puce-jamma` | contrat : `JammaBoard` (vidéo, son, commandes 4 joueurs × 6 boutons, pièces, service, test, tilt, analogique, DIP décrits, savestates, débogage optionnel) et `BoardDriver` (catalogue, chargement). Aucune dépendance. |
 | `puce-jamma-testboard` | carte de test (mire, curseur, bip, DIP) pour développer et tester les frontaux. |
-| `puce-jamma-gui` | frontal egui réutilisable, repris du GUI de Puce16 Neo Geo : scalers 2x (HQ2X, Eagle, 2xSaI, Scale2x…), filtres CRT (scanlines, masques, canaux RVB, convergence, barre de balayage, faisceau et phosphore, rémanence), overlay de performances, son cpal, clavier et manettes, menus DIP générés, savestates, captures, débogueur générique. |
+| `puce-jamma-gui` | frontal egui réutilisable, repris du GUI de Puce16 Neo Geo : scalers 2x (HQ2X, Eagle, 2xSaI, Scale2x…), filtres CRT (scanlines, masques, canaux RVB, convergence, barre de balayage, persistance du phosphore, faisceau au ralenti), overlay de performances, son cpal, clavier et manettes, menus DIP générés, savestates, captures, débogueur générique. |
 
 Contrat : `docs/spec/00-contrat-jamma.md`. Développement par cartes Hermes Kanban (`tasks/`, `scripts/kanban_import.ps1`, board « jamma »), méthode de Puce16 Neo Geo.
 Premier utilisateur : [PuceArcade CPS1](https://github.com/Farquaad56/PuceArcade_CPS1) (épingle une révision git).

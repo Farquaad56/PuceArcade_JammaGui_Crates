@@ -295,28 +295,36 @@ fn graph(ui: &mut egui::Ui, perf: &Perf) {
     }
 }
 
-/// Dessine l'overlay. `top_pad` / `bottom_pad` : marges (points) pour ne pas recouvrir la barre de
-/// menus ni la barre d'état ; `scale` : texte d'échelle, ex. « x4 1280x896 ».
+/// Position de l'overlay : coin choisi de la zone de l'image `area`, à 8 points du bord.
+pub fn corner_pos(area: egui::Rect, corner: Corner) -> egui::Pos2 {
+    let a = area.shrink(8.0);
+    match corner {
+        Corner::TopLeft => a.left_top(),
+        Corner::TopRight => a.right_top(),
+        Corner::BottomLeft => a.left_bottom(),
+        Corner::BottomRight => a.right_bottom(),
+    }
+}
+
+/// Dessine l'overlay dans un coin de `area` (zone de l'image, hors menus, barre d'état et
+/// panneaux). Il est sous les fenêtres (ordre `Middle`, jamais remonté car non interactif) ;
+/// `scale` : texte d'échelle, ex. « x4 1280x896 ».
 pub fn show(
     ctx: &egui::Context,
     prefs: &OverlayPrefs,
     perf: &Perf,
     state: RunState,
     scale: Option<&str>,
-    (top_pad, bottom_pad): (f32, f32),
+    area: egui::Rect,
 ) {
     if !prefs.enabled {
         return;
     }
-    let offset = match prefs.corner {
-        Corner::TopLeft => egui::vec2(8.0, top_pad),
-        Corner::TopRight => egui::vec2(-8.0, top_pad),
-        Corner::BottomLeft => egui::vec2(8.0, -bottom_pad),
-        Corner::BottomRight => egui::vec2(-8.0, -bottom_pad),
-    };
     egui::Area::new(egui::Id::NULL.with("perf_overlay"))
-        .order(egui::Order::Foreground)
-        .anchor(prefs.corner.align(), offset)
+        .order(egui::Order::Middle)
+        .fixed_pos(corner_pos(area, prefs.corner))
+        .pivot(prefs.corner.align())
+        .constrain_to(area)
         .interactable(false)
         .show(ctx, |ui| {
             egui::Frame::NONE

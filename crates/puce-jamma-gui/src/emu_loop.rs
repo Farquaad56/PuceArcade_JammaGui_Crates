@@ -40,7 +40,12 @@ struct Emu {
     inputs: JammaInputs,
     period: Duration,
     next: Instant,
+    /// Débogueur ouvert : instantanés réguliers.
+    debug_live: bool,
 }
+
+/// En marche, débogueur ouvert : un instantané toutes les `LIVE_EVERY` trames.
+const LIVE_EVERY: u64 = 10;
 
 impl Emu {
     fn new(driver: Arc<dyn BoardDriver>, tx: Sender<Event>) -> Self {
@@ -53,6 +58,7 @@ impl Emu {
             inputs: JammaInputs::default(),
             period: frame_period(60.0),
             next: Instant::now(),
+            debug_live: false,
         }
     }
 
@@ -110,7 +116,8 @@ impl Emu {
         let emu_ms = t0.elapsed().as_secs_f32() * 1000.0;
         let info = board.info().video;
         let frame = board.frame_count();
-        let dbg = with_debug.then(|| DebugSnapshot::of(board.as_mut()));
+        let live = self.debug_live && frame % LIVE_EVERY == 0;
+        let dbg = (with_debug || live).then(|| DebugSnapshot::of(board.as_mut()));
         self.send(Event::Frame {
             pixels,
             info,
@@ -136,6 +143,15 @@ impl Emu {
             Cmd::Pause(p) => {
                 self.paused = p;
                 self.next = Instant::now();
+                if p && self.debug_live {
+                    self.send_snapshot();
+                }
+            }
+            Cmd::DebugLive(on) => {
+                self.debug_live = on;
+                if on {
+                    self.send_snapshot();
+                }
             }
             Cmd::Inputs(i) => self.inputs = i,
             Cmd::Dips(d) => {
@@ -145,7 +161,7 @@ impl Emu {
             }
             Cmd::SaveState(slot) => self.save_state(slot),
             Cmd::LoadState(slot) => self.load_state(slot),
-            Cmd::Step => self.step(),
+            Cmd::Step(cpu) => self.step(cpu),
             Cmd::FrameAdvance => self.frame(true),
             Cmd::LayerMask(m) => {
                 if let Some(d) = self.board.as_mut().and_then(|b| b.debug()) {
@@ -179,6 +195,9 @@ impl Emu {
                 self.game = name;
                 self.board = Some(b);
                 self.send(Event::Loaded(info));
+                if self.debug_live {
+                    self.send_snapshot();
+                }
             }
             Err(e) => {
                 self.game.clear();
@@ -187,13 +206,21 @@ impl Emu {
         }
     }
 
-    /// Une instruction du CPU 0 si la carte a un débogueur, sinon une trame ; puis image et instantané.
-    fn step(&mut self) {
+    /// Instantané de débogage de la carte courante.
+    fn send_snapshot(&mut self) {
+        if let Some(board) = self.board.as_mut() {
+            let snap = DebugSnapshot::of(board.as_mut());
+            self.send(Event::Debug(snap));
+        }
+    }
+
+    /// Une instruction du CPU `cpu` si la carte a un débogueur, sinon une trame ; puis image et instantané.
+    fn step(&mut self, cpu: usize) {
         let Some(board) = self.board.as_mut() else {
             return;
         };
         match board.debug() {
-            Some(d) => d.step_instruction(0),
+            Some(d) => d.step_instruction(cpu),
             None => {
                 self.frame(true);
                 return;
@@ -285,7 +312,7 @@ mod tests {
             Event::Loaded(info) => assert_eq!(info.name, "mire"),
             _ => unreachable!(),
         }
-        tx.send(Cmd::Step).unwrap();
+        tx.send(Cmd::Step(0)).unwrap();
         match wait_for(&rx, |e| matches!(e, Event::Frame { .. })) {
             Event::Frame { frame, pixels, .. } => {
                 assert_eq!(frame, 1);
@@ -364,7 +391,7 @@ mod tests {
         tx.send(Cmd::Pause(true)).unwrap();
         tx.send(Cmd::Load("mire".into())).unwrap();
         wait_for(&rx, |e| matches!(e, Event::Loaded(_)));
-        tx.send(Cmd::Step).unwrap();
+        tx.send(Cmd::Step(0)).unwrap();
         match wait_for(&rx, |e| matches!(e, Event::Debug(_))) {
             Event::Debug(d) => assert_eq!(d.cpus[0].pc, 1),
             _ => unreachable!(),
@@ -397,6 +424,26 @@ mod tests {
             Event::Frame { pixels, .. } => assert_eq!(pixels[0], 0x202020),
             _ => unreachable!(),
         }
+        tx.send(Cmd::Quit).unwrap();
+        join.join().unwrap();
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn debug_live_sends_snapshots() {
+        let dir = temp_dir("live");
+        let (tx, rx, join) = spawn(Arc::new(TestDriver::new(&dir)));
+        tx.send(Cmd::Load("mire".into())).unwrap();
+        tx.send(Cmd::DebugLive(true)).unwrap();
+        let deadline = Instant::now() + Duration::from_secs(5);
+        let mut snaps = 0;
+        while Instant::now() < deadline && snaps < 3 {
+            if let Ok(Event::Debug(d)) = rx.recv_timeout(Duration::from_millis(100)) {
+                assert!(!d.cpus.is_empty());
+                snaps += 1;
+            }
+        }
+        assert!(snaps >= 3, "instantanés réguliers en marche : {snaps}");
         tx.send(Cmd::Quit).unwrap();
         join.join().unwrap();
         let _ = std::fs::remove_dir_all(&dir);

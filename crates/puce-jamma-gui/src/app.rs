@@ -108,6 +108,10 @@ pub struct App {
     phosphor: postfx::Phosphor,
     fx_tex: Option<(FxKey, egui::TextureHandle)>,
     pub(crate) layout: Option<DisplayRect>,
+    /// Zone centrale (image) de la dernière trame affichée : l'overlay s'y place.
+    pub(crate) central_rect: Option<egui::Rect>,
+    /// Dernier état « débogueur ouvert » transmis au thread d'émulation.
+    debug_live_sent: bool,
     sound: Option<Sound>,
     pub(crate) paused: bool,
     pub(crate) slot: u8,
@@ -159,6 +163,8 @@ impl App {
             phosphor: postfx::Phosphor::default(),
             fx_tex: None,
             layout: None,
+            central_rect: None,
+            debug_live_sent: false,
             sound: sound.map(|out| Sound {
                 resampler: AudioResampler::new(48_000.0, out.rate),
                 out,
@@ -255,7 +261,14 @@ impl App {
                 Event::ScreenshotSaved(p) => {
                     self.info_msg = Some(format!("capture : {}", p.display()))
                 }
-                Event::Debug(d) => self.debugger.set_snapshot(d),
+                Event::Debug(d) => {
+                    self.debugger.set_snapshot(d);
+                    // onglet Mémoire : relu à chaque nouvel instantané
+                    if self.debugger.open && self.debugger.tab == crate::debugger::Tab::Memory {
+                        let cmd = self.debugger.peek_cmd();
+                        self.send(cmd);
+                    }
+                }
                 Event::Memory(m) => self.debugger.set_memory(m),
             }
         }
@@ -327,9 +340,16 @@ impl App {
         if self.fx_tex.as_ref().map(|(k, _)| *k) != Some(key) {
             let (w, h) = (l.px.0 as usize, l.px.1 as usize);
             let t0 = Instant::now();
-            let frame = s.frame;
-            let mut pixels = postfx::render(&s.pixels, s.w, s.h, &fx, w, h, frame);
-            self.phosphor.apply(&mut pixels, w, h, &fx, frame);
+            let (frame, sw, sh) = (s.frame, s.w, s.h);
+            let pixels = if fx.phosphor_active() {
+                // phosphore sur l'image du jeu, avant agrandissement, scanlines et masque
+                let mut src = s.pixels.clone();
+                self.phosphor.apply(&mut src, sw, sh, &fx, frame);
+                postfx::render(&src, sw, sh, &fx, w, h, frame)
+            } else {
+                self.phosphor.clear();
+                postfx::render(&s.pixels, sw, sh, &fx, w, h, frame)
+            };
             let img = egui::ColorImage {
                 size: [w, h],
                 source_size: egui::vec2(w as f32, h as f32),
@@ -353,6 +373,7 @@ impl App {
     /// Dessine la trame dans la zone centrale.
     fn draw_frame(&mut self, ui: &mut egui::Ui) {
         let avail = ui.max_rect();
+        self.central_rect = Some(avail);
         let (Some(t), Some(b)) = (self.texture.as_ref().map(|t| t.id()), self.board.as_ref())
         else {
             self.layout = None;
@@ -458,6 +479,11 @@ impl eframe::App for App {
             .frame(egui::Frame::NONE.fill(egui::Color32::BLACK))
             .show(ui, |ui| self.draw_frame(ui));
         self.draw_overlay(&ctx);
+        let live = self.debugger.open && self.board.is_some();
+        if live != self.debug_live_sent {
+            self.send(Cmd::DebugLive(live));
+            self.debug_live_sent = live;
+        }
         self.save_prefs_if_changed();
         ctx.request_repaint();
     }
