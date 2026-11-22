@@ -2,9 +2,11 @@
 #![forbid(unsafe_code)]
 
 pub mod display;
+pub mod overlay;
 pub mod pixel2x;
 pub mod postfx;
 pub mod prefs;
+pub mod statusbar;
 
 #[cfg(test)]
 mod smoke {
