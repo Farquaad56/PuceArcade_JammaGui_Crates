@@ -4,6 +4,7 @@
 pub mod audio;
 pub mod bindings;
 pub mod capture;
+pub mod controls_menu;
 pub mod display;
 pub mod emu_loop;
 pub mod emu_thread;
