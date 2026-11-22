@@ -104,8 +104,6 @@ pub struct App {
     raw: Option<(Vec<u32>, VideoInfo, u64)>,
     shown: Option<Shown>,
     texture: Option<egui::TextureHandle>,
-    /// Écran à phosphore (faisceau au ralenti, rémanence) : état entre deux images.
-    phosphor: postfx::Phosphor,
     fx_tex: Option<(FxKey, egui::TextureHandle)>,
     pub(crate) layout: Option<DisplayRect>,
     /// Zone centrale (image) de la dernière trame affichée : l'overlay s'y place.
@@ -160,7 +158,6 @@ impl App {
             raw: None,
             shown: None,
             texture: None,
-            phosphor: postfx::Phosphor::default(),
             fx_tex: None,
             layout: None,
             central_rect: None,
@@ -329,7 +326,6 @@ impl App {
         let s = self.shown.as_ref()?;
         if !fx.is_active() {
             self.perf.fx_ms = None;
-            self.phosphor.clear();
             return None;
         }
         let key = FxKey {
@@ -341,15 +337,7 @@ impl App {
             let (w, h) = (l.px.0 as usize, l.px.1 as usize);
             let t0 = Instant::now();
             let (frame, sw, sh) = (s.frame, s.w, s.h);
-            let pixels = if fx.phosphor_active() {
-                // phosphore sur l'image du jeu, avant agrandissement, scanlines et masque
-                let mut src = s.pixels.clone();
-                self.phosphor.apply(&mut src, sw, sh, &fx, frame);
-                postfx::render(&src, sw, sh, &fx, w, h, frame)
-            } else {
-                self.phosphor.clear();
-                postfx::render(&s.pixels, sw, sh, &fx, w, h, frame)
-            };
+            let pixels = postfx::render(&s.pixels, sw, sh, &fx, w, h, frame);
             let img = egui::ColorImage {
                 size: [w, h],
                 source_size: egui::vec2(w as f32, h as f32),
