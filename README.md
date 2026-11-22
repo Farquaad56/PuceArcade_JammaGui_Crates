@@ -11,3 +11,39 @@ qui accepte n'importe quelle carte.
 
 Contrat : `docs/spec/00-contrat-jamma.md`. Développement par cartes Hermes Kanban (`tasks/`, `scripts/kanban_import.ps1`, board « jamma »), méthode de Puce16 Neo Geo.
 Premier utilisateur : [PuceArcade CPS1](https://github.com/Farquaad56/PuceArcade_CPS1) (épingle une révision git).
+
+![Mire de test](docs/images/mire.png)
+
+![Mire verticale et débogueur](docs/images/mire_v_debogueur.png)
+
+## Essayer
+
+```
+cargo run -p puce-jamma-gui --example testboard --release
+```
+
+Brancher son émulateur : `docs/INTEGRATION.md`.
+
+## Commandes par défaut (modifiables dans Machine > Commandes)
+
+| | Joueur 1 | Joueur 2 | Manette n -> joueur n |
+|---|---|---|---|
+| Directions | flèches | I / K / J / L | croix ou stick gauche |
+| Boutons 1 à 6 | Z X A S Q W | G H T Y U O | South East West North LeftTrigger RightTrigger |
+| Start | Entrée | P | Start |
+| Pièce | 5 (pièces 1-4 : 5 6 7 8) | 6 | Select |
+
+Service : 9 ; Test : F2 ; Tilt : aucune touche. Joueurs 3 et 4 : manettes 3 et 4 (aucune touche par défaut).
+
+## Raccourcis
+
+| Touche | Action |
+|---|---|
+| F3 | réinitialiser |
+| Ctrl+P | pause (P seul est le Start du joueur 2) |
+| F6 | avance d'une image (en pause) |
+| F5 / F7 | sauver / charger l'état de l'emplacement courant |
+| F8 | emplacement suivant (0 à 9) |
+| F11, Échap | plein écran / quitter le plein écran |
+| F12 | capture PNG (image native tournée) dans le dossier des sauvegardes |
+

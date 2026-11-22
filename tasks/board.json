@@ -83,7 +83,7 @@
     ],
     "file": "tasks/J104.md",
     "assignee": "rust-dev",
-    "status": "todo"
+    "status": "done"
   },
   {
     "id": "J105",
@@ -94,7 +94,7 @@
     ],
     "file": "tasks/J105.md",
     "assignee": "rust-dev",
-    "status": "todo"
+    "status": "done"
   },
   {
     "id": "J105b",
@@ -105,7 +105,7 @@
     ],
     "file": "tasks/J105b.md",
     "assignee": "rust-dev",
-    "status": "todo"
+    "status": "done"
   },
   {
     "id": "J106",
@@ -116,7 +116,7 @@
     ],
     "file": "tasks/J106.md",
     "assignee": "rust-dev",
-    "status": "todo"
+    "status": "done"
   },
   {
     "id": "J107",
@@ -127,7 +127,7 @@
     ],
     "file": "tasks/J107.md",
     "assignee": "rust-dev",
-    "status": "todo"
+    "status": "done"
   },
   {
     "id": "J107b",
@@ -138,7 +138,7 @@
     ],
     "file": "tasks/J107b.md",
     "assignee": "rust-dev",
-    "status": "todo"
+    "status": "done"
   },
   {
     "id": "J108",
@@ -149,7 +149,7 @@
     ],
     "file": "tasks/J108.md",
     "assignee": "rust-dev",
-    "status": "todo"
+    "status": "done"
   },
   {
     "id": "J109",
@@ -160,7 +160,7 @@
     ],
     "file": "tasks/J109.md",
     "assignee": "rust-dev",
-    "status": "todo"
+    "status": "done"
   },
   {
     "id": "J109b",
@@ -171,7 +171,7 @@
     ],
     "file": "tasks/J109b.md",
     "assignee": "rust-dev",
-    "status": "todo"
+    "status": "done"
   },
   {
     "id": "J110",
@@ -182,7 +182,7 @@
     ],
     "file": "tasks/J110.md",
     "assignee": "rust-dev",
-    "status": "todo"
+    "status": "done"
   },
   {
     "id": "J110b",
@@ -193,7 +193,7 @@
     ],
     "file": "tasks/J110b.md",
     "assignee": "rust-dev",
-    "status": "todo"
+    "status": "done"
   },
   {
     "id": "J200",
@@ -204,6 +204,6 @@
     ],
     "file": "tasks/J200.md",
     "assignee": "rust-dev",
-    "status": "todo"
+    "status": "done"
   }
 ]
