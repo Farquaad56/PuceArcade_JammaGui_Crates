@@ -20,5 +20,6 @@ J2 Publication terminée : v0.1.0. Prochaine étape : intégration dans PuceArca
   - J110/J110b debugger.rs (onglets CPU, Mémoire par Cmd::Peek -> Event::Memory, Pas/Image/Continuer) et video_debug.rs (registres, images zoom 1-4, couches -> LayerMask).
   - Vérification visuelle (Xvfb + llvmpipe) : mire à x2 et 60 fps, mire_v tournée correctement, overlay, débogueur (la fenêtre s'élargit du panneau). Captures : docs/images/.
   - J200 docs/INTEGRATION.md, README (captures, commandes, raccourcis), CHANGELOG ; tag annoté local v0.1.0 (push du tag par l'utilisateur).
+- **v0.1.0 = commit `311b8eccc5e6b1204704ecf985ef785b8ecec33c`** (tag annoté local `v0.1.0`) : révision à épingler par PuceArcade CPS1 (carte T500), `rev = "311b8eccc5e6b1204704ecf985ef785b8ecec33c"`.
 ## Blocages
 (aucun)

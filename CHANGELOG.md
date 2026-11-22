@@ -2,6 +2,8 @@
 
 ## v0.1.0
 
+Commit `311b8eccc5e6b1204704ecf985ef785b8ecec33c` (tag `v0.1.0`).
+
 Première version du contrat et du frontal.
 
 - `puce-jamma` (contrat gelé v0.1) : `JammaBoard`, `BoardDebug`, `BoardDriver`, `JammaInputs` (4 joueurs × 6 boutons, 4 pièces,
