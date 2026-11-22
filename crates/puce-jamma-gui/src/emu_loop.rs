@@ -13,7 +13,7 @@ use puce_jamma::driver::BoardDriver;
 use puce_jamma::inputs::JammaInputs;
 
 use crate::capture;
-use crate::emu_thread::{frame_period, step_once, Cmd, DebugSnapshot, Event};
+use crate::emu_thread::{frame_period, step_once, Cmd, DebugSnapshot, Event, MAX_PEEK};
 
 /// Nombre maximal de trames rattrapées d'un coup après un retard.
 const MAX_CATCH_UP: u32 = 3;
@@ -153,6 +153,18 @@ impl Emu {
                 }
             }
             Cmd::Screenshot => self.screenshot(),
+            Cmd::Peek { cpu, addr, len } => {
+                let mem = self
+                    .board
+                    .as_mut()
+                    .and_then(|b| b.debug())
+                    .map_or_else(Vec::new, |d| {
+                        (0..len.min(MAX_PEEK) as u32)
+                            .map(|i| d.peek(cpu, addr.wrapping_add(i)))
+                            .collect()
+                    });
+                self.send(Event::Memory(mem));
+            }
             Cmd::Quit => {}
         }
     }
@@ -343,5 +355,50 @@ mod tests {
         tx.send(Cmd::Load("mire".into())).unwrap();
         drop(tx);
         join.join().unwrap();
+    }
+
+    #[test]
+    fn debug_step_and_peek() {
+        let dir = temp_dir("dbg");
+        let (tx, rx, join) = spawn(Arc::new(TestDriver::new(&dir)));
+        tx.send(Cmd::Pause(true)).unwrap();
+        tx.send(Cmd::Load("mire".into())).unwrap();
+        wait_for(&rx, |e| matches!(e, Event::Loaded(_)));
+        tx.send(Cmd::Step).unwrap();
+        match wait_for(&rx, |e| matches!(e, Event::Debug(_))) {
+            Event::Debug(d) => assert_eq!(d.cpus[0].pc, 1),
+            _ => unreachable!(),
+        }
+        tx.send(Cmd::Peek {
+            cpu: 0,
+            addr: 0,
+            len: 8,
+        })
+        .unwrap();
+        match wait_for(&rx, |e| matches!(e, Event::Memory(_))) {
+            Event::Memory(m) => assert_eq!(m, 1u64.to_le_bytes().to_vec()),
+            _ => unreachable!(),
+        }
+        tx.send(Cmd::Quit).unwrap();
+        join.join().unwrap();
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn layer_mask_hides_color_bars() {
+        let dir = temp_dir("layers");
+        let (tx, rx, join) = spawn(Arc::new(TestDriver::new(&dir)));
+        tx.send(Cmd::Pause(true)).unwrap();
+        tx.send(Cmd::Load("mire".into())).unwrap();
+        wait_for(&rx, |e| matches!(e, Event::Loaded(_)));
+        tx.send(Cmd::LayerMask(0b110)).unwrap();
+        tx.send(Cmd::FrameAdvance).unwrap();
+        match wait_for(&rx, |e| matches!(e, Event::Frame { .. })) {
+            Event::Frame { pixels, .. } => assert_eq!(pixels[0], 0x202020),
+            _ => unreachable!(),
+        }
+        tx.send(Cmd::Quit).unwrap();
+        join.join().unwrap();
+        let _ = std::fs::remove_dir_all(&dir);
     }
 }

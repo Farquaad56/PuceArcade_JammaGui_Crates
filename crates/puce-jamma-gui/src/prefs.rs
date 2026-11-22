@@ -97,6 +97,8 @@ pub struct Prefs {
     pub input: InputPrefs,
     pub debug: DebugPrefs,
     pub fx: Fx,
+    /// Dernier jeu chargé (relancé au démarrage si le driver le connaît encore).
+    pub last_game: Option<String>,
 }
 
 /// Chemin des préférences : `<config_dir>/prefs.toml`.
@@ -240,6 +242,9 @@ impl Prefs {
             "\n[debug]\nopen = {}\ntab = \"{}\"\nregion = \"{}\"\nshow_status_bar = {}\n",
             g.open, g.tab, g.region, g.show_status_bar
         ));
+        if let Some(game) = self.last_game.as_deref().filter(|g| is_plain(g)) {
+            s.push_str(&format!("\n[session]\nlast_game = \"{game}\"\n"));
+        }
         s
     }
 
@@ -377,6 +382,7 @@ impl Prefs {
                 }
                 ("debug", "tab") if is_plain(v) => p.debug.tab = v.to_string(),
                 ("debug", "region") if is_plain(v) => p.debug.region = v.to_string(),
+                ("session", "last_game") if is_plain(v) => p.last_game = Some(v.to_string()),
                 ("debug", "show_status_bar") => {
                     if let Some(b) = parse_bool(v) {
                         p.debug.show_status_bar = b;
@@ -441,6 +447,7 @@ mod tests {
                 full: false,
                 corner: Corner::BottomRight,
             },
+            last_game: Some("sf2ce".into()),
         }
     }
 

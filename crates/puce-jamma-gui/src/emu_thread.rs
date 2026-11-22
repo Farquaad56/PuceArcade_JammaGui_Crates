@@ -31,8 +31,17 @@ pub enum Cmd {
     LayerMask(u32),
     /// Capture PNG de l'image courante.
     Screenshot,
+    /// Lecture de `len` octets (au plus `MAX_PEEK`) à `addr` dans l'espace du CPU `cpu`, sans effet de bord.
+    Peek {
+        cpu: usize,
+        addr: u32,
+        len: usize,
+    },
     Quit,
 }
+
+/// Taille maximale d'une lecture `Peek`.
+pub const MAX_PEEK: usize = 4096;
 
 /// Événement publié par le thread d'émulation.
 #[derive(Clone, Debug, PartialEq)]
@@ -54,6 +63,8 @@ pub enum Event {
     StateError(String),
     ScreenshotSaved(PathBuf),
     Debug(DebugSnapshot),
+    /// Réponse à `Peek` (vide si la carte n'a pas de débogueur).
+    Memory(Vec<u8>),
 }
 
 /// Instantané de débogage (vide si la carte n'a pas de débogueur).
