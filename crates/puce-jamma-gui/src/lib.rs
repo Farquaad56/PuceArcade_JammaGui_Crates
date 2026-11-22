@@ -3,6 +3,7 @@
 
 pub mod display;
 pub mod pixel2x;
+pub mod postfx;
 pub mod prefs;
 
 #[cfg(test)]
