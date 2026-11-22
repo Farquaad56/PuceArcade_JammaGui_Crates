@@ -104,6 +104,8 @@ pub struct App {
     raw: Option<(Vec<u32>, VideoInfo, u64)>,
     shown: Option<Shown>,
     texture: Option<egui::TextureHandle>,
+    /// Écran à phosphore (faisceau au ralenti, rémanence) : état entre deux images.
+    phosphor: postfx::Phosphor,
     fx_tex: Option<(FxKey, egui::TextureHandle)>,
     pub(crate) layout: Option<DisplayRect>,
     sound: Option<Sound>,
@@ -154,6 +156,7 @@ impl App {
             raw: None,
             shown: None,
             texture: None,
+            phosphor: postfx::Phosphor::default(),
             fx_tex: None,
             layout: None,
             sound: sound.map(|out| Sound {
@@ -313,6 +316,7 @@ impl App {
         let s = self.shown.as_ref()?;
         if !fx.is_active() {
             self.perf.fx_ms = None;
+            self.phosphor.clear();
             return None;
         }
         let key = FxKey {
@@ -323,10 +327,13 @@ impl App {
         if self.fx_tex.as_ref().map(|(k, _)| *k) != Some(key) {
             let (w, h) = (l.px.0 as usize, l.px.1 as usize);
             let t0 = Instant::now();
+            let frame = s.frame;
+            let mut pixels = postfx::render(&s.pixels, s.w, s.h, &fx, w, h, frame);
+            self.phosphor.apply(&mut pixels, w, h, &fx, frame);
             let img = egui::ColorImage {
                 size: [w, h],
                 source_size: egui::vec2(w as f32, h as f32),
-                pixels: postfx::render(&s.pixels, s.w, s.h, &fx, w, h, s.frame),
+                pixels,
             };
             self.perf.smooth_fx(t0.elapsed().as_secs_f32() * 1000.0);
             match &mut self.fx_tex {

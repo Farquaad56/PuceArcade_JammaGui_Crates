@@ -262,6 +262,47 @@ fn tube_section(ui: &mut egui::Ui, fx: &mut Fx) -> bool {
                     ui.end_row();
                 }
             });
+            ui.separator();
+
+            ui.label("Faisceau et phosphore");
+            egui::Grid::new("fx_beam").num_columns(2).show(ui, |ui| {
+                ui.label("Faisceau au ralenti");
+                changed |= ui
+                    .add(
+                        egui::Slider::new(&mut fx.beam, 0..=100)
+                            .custom_formatter(|v, _| {
+                                if v < 1.0 {
+                                    "désactivé".to_string()
+                                } else {
+                                    format!("{:.1} s par image", v / 10.0)
+                                }
+                            })
+                            .custom_parser(|s| {
+                                s.split_whitespace()
+                                    .next()?
+                                    .replace(',', ".")
+                                    .parse::<f64>()
+                                    .ok()
+                                    .map(|v| v * 10.0)
+                            }),
+                    )
+                    .changed();
+                ui.end_row();
+                if fx.beam > 0 {
+                    ui.label("Persistance du phosphore");
+                    changed |= pct(ui, &mut fx.phosphor, 0..=100, 5.0);
+                    ui.end_row();
+                    ui.label("Luminosité minimale");
+                    changed |= pct(ui, &mut fx.beam_floor, 0..=100, 5.0);
+                    ui.end_row();
+                }
+                ui.label("Rémanence entre images");
+                changed |= pct(ui, &mut fx.ghost, 0..=90, 5.0);
+                ui.end_row();
+            });
+            if fx.beam > 0 {
+                ui.weak("L'image se redessine ligne par ligne ; le jeu continue en temps réel.");
+            }
         });
     changed
 }

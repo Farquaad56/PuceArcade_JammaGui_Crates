@@ -9,8 +9,13 @@
     parfaite » et « Tube fatigué » ;
   - barre de balayage : bande claire qui descend l'écran avec une traînée sombre, intensité, durée d'un passage
     (0,5 à 10 s) et hauteur réglables.
+  - faisceau et phosphore : faisceau au ralenti (0,1 à 10 s par image) qui redessine l'image ligne par ligne ;
+    chaque ligne garde l'image de son dernier passage et s'éteint selon la persistance du phosphore, jusqu'à une
+    luminosité minimale réglable ; le jeu continue en temps réel ;
+  - rémanence entre images (0 à 90 %) : traînées derrière les objets qui bougent.
 - API : `Fx` gagne `red`, `green`, `blue`, `conv_rx`, `conv_ry`, `conv_bx`, `conv_by`, `sweep`, `sweep_speed`,
-  `sweep_width` ; `postfx::render` prend le numéro de trame (position de la barre) ; `postfx::sweep_gains`,
+  `sweep_width`, `beam`, `phosphor`, `beam_floor`, `ghost` ; `postfx::Phosphor` (état entre deux images,
+  `apply` après `render`) ; `postfx::render` prend le numéro de trame (position de la barre) ; `postfx::sweep_gains`,
   `Fx::tube_active`, `Fx::without_tube`, `Fx::with_tube_of`.
 - Exemple `fx_demo` : aperçu des filtres sur une image PNG.
 

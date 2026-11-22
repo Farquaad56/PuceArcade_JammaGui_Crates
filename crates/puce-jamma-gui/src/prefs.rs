@@ -238,8 +238,9 @@ impl Prefs {
             f.mask_pct
         ));
         s.push_str(&format!(
-            "red = {}\ngreen = {}\nblue = {}\nconv_rx = {}\nconv_ry = {}\nconv_bx = {}\nconv_by = {}\nsweep = {}\nsweep_speed = {}\nsweep_width = {}\n",
-            f.red, f.green, f.blue, f.conv_rx, f.conv_ry, f.conv_bx, f.conv_by, f.sweep, f.sweep_speed, f.sweep_width
+            "red = {}\ngreen = {}\nblue = {}\nconv_rx = {}\nconv_ry = {}\nconv_bx = {}\nconv_by = {}\nsweep = {}\nsweep_speed = {}\nsweep_width = {}\nbeam = {}\nphosphor = {}\nbeam_floor = {}\nghost = {}\n",
+            f.red, f.green, f.blue, f.conv_rx, f.conv_ry, f.conv_bx, f.conv_by, f.sweep, f.sweep_speed, f.sweep_width,
+            f.beam, f.phosphor, f.beam_floor, f.ghost
         ));
         let g = &self.debug;
         s.push_str(&format!(
@@ -410,6 +411,26 @@ impl Prefs {
                         p.fx.sweep_speed = n.clamp(5, 100);
                     }
                 }
+                ("fx", "beam") => {
+                    if let Ok(n) = v.parse::<u8>() {
+                        p.fx.beam = n.min(100);
+                    }
+                }
+                ("fx", "phosphor") => {
+                    if let Ok(n) = v.parse::<u8>() {
+                        p.fx.phosphor = n.min(100);
+                    }
+                }
+                ("fx", "beam_floor") => {
+                    if let Ok(n) = v.parse::<u8>() {
+                        p.fx.beam_floor = n.min(100);
+                    }
+                }
+                ("fx", "ghost") => {
+                    if let Ok(n) = v.parse::<u8>() {
+                        p.fx.ghost = n.min(90);
+                    }
+                }
                 ("fx", "sweep_width") => {
                     if let Ok(n) = v.parse::<u8>() {
                         p.fx.sweep_width = n.clamp(2, 50);
@@ -482,6 +503,10 @@ mod tests {
                 sweep: 30,
                 sweep_speed: 25,
                 sweep_width: 20,
+                beam: 30,
+                phosphor: 45,
+                beam_floor: 15,
+                ghost: 40,
                 ..Fx::preset(crate::postfx::Preset::SonyTrinitron)
             },
             audio: AudioPrefs {
