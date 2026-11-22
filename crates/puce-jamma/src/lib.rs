@@ -7,12 +7,18 @@
 #![forbid(unsafe_code)]
 
 pub mod audio;
+pub mod board;
+pub mod debug;
 pub mod dips;
+pub mod driver;
 pub mod inputs;
 pub mod video;
 
 pub use audio::*;
+pub use board::*;
+pub use debug::*;
 pub use dips::*;
+pub use driver::*;
 pub use inputs::*;
 pub use video::*;
 
