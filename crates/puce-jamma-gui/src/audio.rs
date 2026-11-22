@@ -57,7 +57,11 @@ struct Shared {
 }
 
 /// Recopie des échantillons stéréo de `q` vers `data` (entrelacé sur `channels` voies) au format `T`.
-fn fill_frames<T: SizedSample + FromSample<f32>>(q: &mut VecDeque<f32>, data: &mut [T], channels: usize) {
+fn fill_frames<T: SizedSample + FromSample<f32>>(
+    q: &mut VecDeque<f32>,
+    data: &mut [T],
+    channels: usize,
+) {
     for frame in data.chunks_mut(channels) {
         let l = q.pop_front().unwrap_or(0.0);
         let r = q.pop_front().unwrap_or(0.0);

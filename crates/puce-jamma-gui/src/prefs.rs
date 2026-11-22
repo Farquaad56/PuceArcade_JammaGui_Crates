@@ -519,7 +519,9 @@ mod tests {
     #[test]
     fn neo_geo_tv_aspect_key_still_reads() {
         assert_eq!(
-            Prefs::from_toml("[display]\naspect = \"4:3\"").display.aspect,
+            Prefs::from_toml("[display]\naspect = \"4:3\"")
+                .display
+                .aspect,
             Aspect::Tv
         );
     }

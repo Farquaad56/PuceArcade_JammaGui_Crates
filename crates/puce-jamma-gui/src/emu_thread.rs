@@ -47,7 +47,9 @@ pub enum Event {
     /// Échantillons entrelacés selon `BoardInfo::audio.channels`, dans [-1, 1].
     Audio(Vec<f32>),
     /// Temps de calcul de la dernière trame, en ms.
-    Stats { emu_ms: f32 },
+    Stats {
+        emu_ms: f32,
+    },
     Saved(u8),
     StateError(String),
     ScreenshotSaved(PathBuf),

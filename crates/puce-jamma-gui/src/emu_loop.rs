@@ -231,7 +231,8 @@ impl Emu {
             return;
         };
         let v = board.video();
-        let path = capture::screenshot_path(&self.driver.saves_dir(), &self.game, board.frame_count());
+        let path =
+            capture::screenshot_path(&self.driver.saves_dir(), &self.game, board.frame_count());
         match capture::write_png(&path, v.pixels, &v.info) {
             Ok(()) => self.send(Event::ScreenshotSaved(path)),
             Err(e) => self.send(Event::StateError(e)),
@@ -280,16 +281,25 @@ mod tests {
             }
             _ => unreachable!(),
         }
-        assert!(matches!(wait_for(&rx, |e| matches!(e, Event::Debug(_))), Event::Debug(_)));
+        assert!(matches!(
+            wait_for(&rx, |e| matches!(e, Event::Debug(_))),
+            Event::Debug(_)
+        ));
         // En pause, aucune autre trame n'arrive.
         assert!(rx.recv_timeout(Duration::from_millis(100)).is_err());
 
         tx.send(Cmd::SaveState(1)).unwrap();
-        assert_eq!(wait_for(&rx, |e| matches!(e, Event::Saved(_))), Event::Saved(1));
+        assert_eq!(
+            wait_for(&rx, |e| matches!(e, Event::Saved(_))),
+            Event::Saved(1)
+        );
         assert!(dir.join("mire.s1").exists());
         tx.send(Cmd::LoadState(1)).unwrap();
         tx.send(Cmd::LoadState(7)).unwrap();
-        assert!(matches!(wait_for(&rx, |e| matches!(e, Event::StateError(_))), Event::StateError(_)));
+        assert!(matches!(
+            wait_for(&rx, |e| matches!(e, Event::StateError(_))),
+            Event::StateError(_)
+        ));
 
         tx.send(Cmd::Screenshot).unwrap();
         match wait_for(&rx, |e| matches!(e, Event::ScreenshotSaved(_))) {
@@ -298,7 +308,10 @@ mod tests {
         }
 
         tx.send(Cmd::Load("zz".into())).unwrap();
-        assert!(matches!(wait_for(&rx, |e| matches!(e, Event::LoadError(_))), Event::LoadError(_)));
+        assert!(matches!(
+            wait_for(&rx, |e| matches!(e, Event::LoadError(_))),
+            Event::LoadError(_)
+        ));
         tx.send(Cmd::Quit).unwrap();
         join.join().unwrap();
         let _ = std::fs::remove_dir_all(&dir);
@@ -313,7 +326,10 @@ mod tests {
         std::thread::sleep(Duration::from_millis(500));
         tx.send(Cmd::Quit).unwrap();
         join.join().unwrap();
-        let frames = rx.try_iter().filter(|e| matches!(e, Event::Frame { .. })).count();
+        let frames = rx
+            .try_iter()
+            .filter(|e| matches!(e, Event::Frame { .. }))
+            .count();
         // 60 Hz pendant ~0,5 s : environ 30 trames (marge pour une machine chargée).
         assert!((15..=40).contains(&frames), "{frames} trames");
         let _ = std::fs::remove_dir_all(&dir);
