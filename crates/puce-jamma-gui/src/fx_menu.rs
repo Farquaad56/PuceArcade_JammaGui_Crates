@@ -1,4 +1,5 @@
-//! Fenêtre « Filtres vidéo » : préréglages d'écran, interpolation, scanlines, gamma, masque.
+//! Fenêtre « Filtres vidéo » : préréglages d'écran, interpolation, scanlines, gamma, masque,
+//! et réglages du tube (canaux RVB, convergence, barre de balayage).
 
 use eframe::egui;
 
@@ -33,9 +34,9 @@ impl FxWindow {
                     .show_ui(ui, |ui| {
                         for p in Preset::ALL {
                             if ui.selectable_label(current == Some(p), p.label()).clicked() {
-                                // le filtre d'agrandissement se choisit à part
+                                // l'agrandissement et le tube se règlent à part
                                 let scaler = fx.scaler;
-                                *fx = Fx::preset(p);
+                                *fx = Fx::preset(p).with_tube_of(fx);
                                 fx.scaler = scaler;
                                 changed = true;
                             }
@@ -170,6 +171,8 @@ impl FxWindow {
                     });
                 }
                 ui.separator();
+                changed |= tube_section(ui, fx);
+                ui.separator();
                 if ui.button("Tout désactiver").clicked() {
                     *fx = Fx::default();
                     changed = true;
@@ -178,4 +181,87 @@ impl FxWindow {
         self.open = open;
         changed
     }
+}
+
+/// Curseur de convergence en pixels écran (−8 à 8).
+fn px(ui: &mut egui::Ui, label: &str, v: &mut i8) -> bool {
+    ui.label(label);
+    ui.add(egui::Slider::new(v, -8..=8).suffix(" px")).changed()
+}
+
+/// Section « Tube CRT » : canaux, convergence, barre de balayage.
+fn tube_section(ui: &mut egui::Ui, fx: &mut Fx) -> bool {
+    let mut changed = false;
+    egui::CollapsingHeader::new(egui::RichText::new("Tube CRT").strong())
+        .default_open(fx.tube_active())
+        .show(ui, |ui| {
+            ui.label("Canaux RVB");
+            egui::Grid::new("fx_rgb").num_columns(2).show(ui, |ui| {
+                for (label, v) in [
+                    ("Rouge", &mut fx.red),
+                    ("Vert", &mut fx.green),
+                    ("Bleu", &mut fx.blue),
+                ] {
+                    ui.label(label);
+                    changed |= pct(ui, v, 0..=200, 1.0);
+                    ui.end_row();
+                }
+            });
+            if ui.small_button("Canaux neutres").clicked() {
+                (fx.red, fx.green, fx.blue) = (100, 100, 100);
+                changed = true;
+            }
+            ui.separator();
+
+            ui.label("Convergence (décalage par rapport au vert)");
+            egui::Grid::new("fx_conv").num_columns(4).show(ui, |ui| {
+                changed |= px(ui, "Rouge X", &mut fx.conv_rx);
+                changed |= px(ui, "Y", &mut fx.conv_ry);
+                ui.end_row();
+                changed |= px(ui, "Bleu X", &mut fx.conv_bx);
+                changed |= px(ui, "Y", &mut fx.conv_by);
+                ui.end_row();
+            });
+            ui.horizontal(|ui| {
+                if ui.small_button("Convergence parfaite").clicked() {
+                    (fx.conv_rx, fx.conv_ry, fx.conv_bx, fx.conv_by) = (0, 0, 0, 0);
+                    changed = true;
+                }
+                if ui.small_button("Tube fatigué").clicked() {
+                    (fx.conv_rx, fx.conv_ry, fx.conv_bx, fx.conv_by) = (1, 0, -1, 1);
+                    changed = true;
+                }
+            });
+            ui.weak("En pixels de l'image affichée : 1 px suffit souvent en ×4.");
+            ui.separator();
+
+            ui.label("Barre de balayage");
+            egui::Grid::new("fx_sweep").num_columns(2).show(ui, |ui| {
+                ui.label("Intensité");
+                changed |= pct(ui, &mut fx.sweep, 0..=100, 5.0);
+                ui.end_row();
+                if fx.sweep > 0 {
+                    ui.label("Durée d'un passage");
+                    changed |= ui
+                        .add(
+                            egui::Slider::new(&mut fx.sweep_speed, 5..=100)
+                                .custom_formatter(|v, _| format!("{:.1} s", v / 10.0))
+                                .custom_parser(|s| {
+                                    s.trim_end_matches('s')
+                                        .trim()
+                                        .replace(',', ".")
+                                        .parse::<f64>()
+                                        .ok()
+                                        .map(|v| v * 10.0)
+                                }),
+                        )
+                        .changed();
+                    ui.end_row();
+                    ui.label("Hauteur");
+                    changed |= pct(ui, &mut fx.sweep_width, 2..=50, 1.0);
+                    ui.end_row();
+                }
+            });
+        });
+    changed
 }

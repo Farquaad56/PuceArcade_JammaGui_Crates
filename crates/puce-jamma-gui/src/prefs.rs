@@ -237,6 +237,10 @@ impl Prefs {
             mask_str(f.mask),
             f.mask_pct
         ));
+        s.push_str(&format!(
+            "red = {}\ngreen = {}\nblue = {}\nconv_rx = {}\nconv_ry = {}\nconv_bx = {}\nconv_by = {}\nsweep = {}\nsweep_speed = {}\nsweep_width = {}\n",
+            f.red, f.green, f.blue, f.conv_rx, f.conv_ry, f.conv_bx, f.conv_by, f.sweep, f.sweep_speed, f.sweep_width
+        ));
         let g = &self.debug;
         s.push_str(&format!(
             "\n[debug]\nopen = {}\ntab = \"{}\"\nregion = \"{}\"\nshow_status_bar = {}\n",
@@ -375,6 +379,42 @@ impl Prefs {
                         p.fx.mask_pct = n.min(100);
                     }
                 }
+                ("fx", "red" | "green" | "blue") => {
+                    if let Ok(n) = v.parse::<u8>() {
+                        let n = n.min(200);
+                        match k {
+                            "red" => p.fx.red = n,
+                            "green" => p.fx.green = n,
+                            _ => p.fx.blue = n,
+                        }
+                    }
+                }
+                ("fx", "conv_rx" | "conv_ry" | "conv_bx" | "conv_by") => {
+                    if let Ok(n) = v.parse::<i8>() {
+                        let n = n.clamp(-8, 8);
+                        match k {
+                            "conv_rx" => p.fx.conv_rx = n,
+                            "conv_ry" => p.fx.conv_ry = n,
+                            "conv_bx" => p.fx.conv_bx = n,
+                            _ => p.fx.conv_by = n,
+                        }
+                    }
+                }
+                ("fx", "sweep") => {
+                    if let Ok(n) = v.parse::<u8>() {
+                        p.fx.sweep = n.min(100);
+                    }
+                }
+                ("fx", "sweep_speed") => {
+                    if let Ok(n) = v.parse::<u8>() {
+                        p.fx.sweep_speed = n.clamp(5, 100);
+                    }
+                }
+                ("fx", "sweep_width") => {
+                    if let Ok(n) = v.parse::<u8>() {
+                        p.fx.sweep_width = n.clamp(2, 50);
+                    }
+                }
                 ("debug", "open") => {
                     if let Some(b) = parse_bool(v) {
                         p.debug.open = b;
@@ -435,6 +475,13 @@ mod tests {
             },
             fx: Fx {
                 scaler: Scaler::SuperEagle,
+                red: 110,
+                blue: 90,
+                conv_rx: 2,
+                conv_by: -1,
+                sweep: 30,
+                sweep_speed: 25,
+                sweep_width: 20,
                 ..Fx::preset(crate::postfx::Preset::SonyTrinitron)
             },
             audio: AudioPrefs {

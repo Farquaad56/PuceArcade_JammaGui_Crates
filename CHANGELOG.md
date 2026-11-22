@@ -1,5 +1,19 @@
 # Changelog
 
+## v0.2.0
+
+- `puce-jamma-gui`, fenêtre « Filtres vidéo », nouvelle section **Tube CRT** (réglages indépendants des préréglages
+  d'écran, sauvegardés dans `prefs.toml`, section `[fx]`) :
+  - canaux RVB : gain du rouge, du vert et du bleu (0 à 200 %) ;
+  - convergence : décalage du rouge et du bleu par rapport au vert (−8 à 8 px, X et Y), boutons « Convergence
+    parfaite » et « Tube fatigué » ;
+  - barre de balayage : bande claire qui descend l'écran avec une traînée sombre, intensité, durée d'un passage
+    (0,5 à 10 s) et hauteur réglables.
+- API : `Fx` gagne `red`, `green`, `blue`, `conv_rx`, `conv_ry`, `conv_bx`, `conv_by`, `sweep`, `sweep_speed`,
+  `sweep_width` ; `postfx::render` prend le numéro de trame (position de la barre) ; `postfx::sweep_gains`,
+  `Fx::tube_active`, `Fx::without_tube`, `Fx::with_tube_of`.
+- Exemple `fx_demo` : aperçu des filtres sur une image PNG.
+
 ## v0.1.0
 
 Commit `311b8eccc5e6b1204704ecf985ef785b8ecec33c` (tag `v0.1.0`).

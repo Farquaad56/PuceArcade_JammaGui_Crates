@@ -53,6 +53,22 @@ pub struct Fx {
     pub mask: Mask,
     /// Force du masque en %.
     pub mask_pct: u8,
+    /// Tube : gain des canaux rouge, vert, bleu en % (100 = neutre, 0 à 200).
+    pub red: u8,
+    pub green: u8,
+    pub blue: u8,
+    /// Tube : convergence, décalage du rouge et du bleu par rapport au vert, en pixels écran
+    /// (−8 à 8 ; x positif vers la droite, y positif vers le bas).
+    pub conv_rx: i8,
+    pub conv_ry: i8,
+    pub conv_bx: i8,
+    pub conv_by: i8,
+    /// Tube : barre de balayage, intensité en % (0 = désactivée).
+    pub sweep: u8,
+    /// Durée d'un passage de la barre, en dixièmes de seconde (5 à 100).
+    pub sweep_speed: u8,
+    /// Hauteur de la barre en % de l'image (2 à 50).
+    pub sweep_width: u8,
 }
 
 impl Default for Fx {
@@ -67,6 +83,16 @@ impl Default for Fx {
             gamma: 100,
             mask: Mask::None,
             mask_pct: 100,
+            red: 100,
+            green: 100,
+            blue: 100,
+            conv_rx: 0,
+            conv_ry: 0,
+            conv_bx: 0,
+            conv_by: 0,
+            sweep: 0,
+            sweep_speed: 40,
+            sweep_width: 12,
         }
     }
 }
@@ -134,7 +160,7 @@ impl Fx {
     /// Réglages avec les valeurs sans effet ramenées à leur défaut (pour comparer).
     fn norm(&self) -> Fx {
         let d = Fx::default();
-        let mut f = *self;
+        let mut f = self.without_tube();
         f.scaler = d.scaler;
         if f.scan_mode != ScanMode::Standard {
             f.scan = d.scan;
@@ -156,6 +182,49 @@ impl Fx {
             || self.scan_mode != ScanMode::Off
             || self.gamma != 100
             || self.mask != Mask::None
+            || self.tube_active()
+    }
+
+    /// Un réglage de tube (canaux, convergence, balayage) agit-il ?
+    pub fn tube_active(&self) -> bool {
+        (self.red, self.green, self.blue) != (100, 100, 100)
+            || (self.conv_rx, self.conv_ry, self.conv_bx, self.conv_by) != (0, 0, 0, 0)
+            || self.sweep > 0
+    }
+
+    /// Mêmes réglages, tube remis à neutre (les préréglages d'écran ne touchent pas au tube).
+    pub fn without_tube(&self) -> Fx {
+        let d = Fx::default();
+        Fx {
+            red: d.red,
+            green: d.green,
+            blue: d.blue,
+            conv_rx: 0,
+            conv_ry: 0,
+            conv_bx: 0,
+            conv_by: 0,
+            sweep: 0,
+            sweep_speed: d.sweep_speed,
+            sweep_width: d.sweep_width,
+            ..*self
+        }
+    }
+
+    /// Copie les réglages de tube de `other` (choix d'un préréglage d'écran).
+    pub fn with_tube_of(&self, other: &Fx) -> Fx {
+        Fx {
+            red: other.red,
+            green: other.green,
+            blue: other.blue,
+            conv_rx: other.conv_rx,
+            conv_ry: other.conv_ry,
+            conv_bx: other.conv_bx,
+            conv_by: other.conv_by,
+            sweep: other.sweep,
+            sweep_speed: other.sweep_speed,
+            sweep_width: other.sweep_width,
+            ..*self
+        }
     }
 }
 
@@ -364,6 +433,7 @@ fn render_rows(c: &Ctx, y0: usize, out: &mut [Color32]) {
 }
 
 /// Applique les filtres : `src` = image (0x00RRGGBB), sortie `w` x `h`.
+/// `frame` = numéro de trame (position de la barre de balayage).
 pub fn render(
     src: &[u32],
     src_w: usize,
@@ -371,6 +441,7 @@ pub fn render(
     fx: &Fx,
     w: usize,
     h: usize,
+    frame: u64,
 ) -> Vec<Color32> {
     assert!(src.len() >= src_w * src_h && w > 0 && h > 0);
     let big = pixel2x::upscale(src, src_w, src_h, fx.scaler);
@@ -471,11 +542,152 @@ pub fn render(
             }
         });
     }
+    if fx.tube_active() {
+        tube(&mut out, w, h, fx, frame);
+    }
     out
+}
+
+/// Trames par seconde supposées pour la vitesse de la barre de balayage.
+const SWEEP_FPS: f32 = 60.0;
+
+/// Gain de la barre de balayage pour chaque ligne, en 8.8 (256 = neutre).
+/// La barre descend de haut en bas en `sweep_speed / 10` secondes ; profil en cosinus, plus
+/// clair au centre, avec une traînée sombre légère au-dessus (rémanence du balayage).
+pub fn sweep_gains(fx: &Fx, h: usize, frame: u64) -> Vec<u32> {
+    let mut g = vec![256u32; h];
+    if fx.sweep == 0 || h == 0 {
+        return g;
+    }
+    let period = (f32::from(fx.sweep_speed.clamp(5, 100)) / 10.0 * SWEEP_FPS).max(1.0);
+    let phase = (frame as f32 % period) / period;
+    let band = (f32::from(fx.sweep_width.clamp(2, 50)) / 100.0 * h as f32).max(2.0);
+    // la barre entre par le haut et sort par le bas : parcours h + bande
+    let center = phase * (h as f32 + band) - band / 2.0;
+    let k = f32::from(fx.sweep.min(100)) / 100.0;
+    for (y, gy) in g.iter_mut().enumerate() {
+        let d = (y as f32 + 0.5 - center) / (band / 2.0);
+        let v = if d.abs() < 1.0 {
+            // éclaircissement jusqu'à +60 % au centre pour une intensité de 100 %
+            1.0 + 0.6 * k * 0.5 * (1.0 + (d * std::f32::consts::PI).cos())
+        } else if d < -1.0 && d > -3.0 {
+            // traînée au-dessus : jusqu'à −15 %
+            1.0 - 0.15 * k * 0.5 * (1.0 + ((d + 2.0) * std::f32::consts::PI).cos())
+        } else {
+            1.0
+        };
+        *gy = (v * 256.0).round() as u32;
+    }
+    g
+}
+
+/// Effets de tube sur l'image finale : convergence, gains des canaux, barre de balayage.
+fn tube(out: &mut [Color32], w: usize, h: usize, fx: &Fx, frame: u64) {
+    let conv = (fx.conv_rx, fx.conv_ry, fx.conv_bx, fx.conv_by) != (0, 0, 0, 0);
+    let src = if conv { out.to_vec() } else { Vec::new() };
+    let sample = |x: usize, y: usize, dx: i8, dy: i8, ch: usize| -> u8 {
+        let sx = x as i32 - i32::from(dx.clamp(-8, 8));
+        let sy = y as i32 - i32::from(dy.clamp(-8, 8));
+        if sx < 0 || sy < 0 || sx >= w as i32 || sy >= h as i32 {
+            0
+        } else {
+            let p = src[sy as usize * w + sx as usize];
+            [p.r(), p.g(), p.b()][ch]
+        }
+    };
+    let gain = |pct: u8| (u32::from(pct.min(200)) * 256 + 50) / 100;
+    let (gr, gg, gb) = (gain(fx.red), gain(fx.green), gain(fx.blue));
+    let sweep = sweep_gains(fx, h, frame);
+    for y in 0..h {
+        let sg = sweep[y];
+        for x in 0..w {
+            let p = out[y * w + x];
+            let (r, g, b) = if conv {
+                (
+                    sample(x, y, fx.conv_rx, fx.conv_ry, 0),
+                    p.g(),
+                    sample(x, y, fx.conv_bx, fx.conv_by, 2),
+                )
+            } else {
+                (p.r(), p.g(), p.b())
+            };
+            let f = |v: u8, cg: u32| ((u32::from(v) * cg * sg + (1 << 15)) >> 16).min(255) as u8;
+            out[y * w + x] = Color32::from_rgb(f(r, gr), f(g, gg), f(b, gb));
+        }
+    }
 }
 
 #[cfg(test)]
 mod tests {
+
+    #[test]
+    fn tube_rgb_gains() {
+        let fx = Fx {
+            red: 200,
+            green: 50,
+            blue: 0,
+            ..Fx::default()
+        };
+        assert!(fx.is_active() && fx.tube_active());
+        let o = render(&[0x0040_8080; 16], 4, 4, &fx, 4, 4, 0);
+        assert_eq!(o[0], Color32::from_rgb(0x80, 0x40, 0));
+        // saturation à 255
+        let o = render(&[0x00F0_0000; 16], 4, 4, &fx, 4, 4, 0);
+        assert_eq!(o[5].r(), 255);
+    }
+
+    #[test]
+    fn tube_convergence_shifts_red_and_blue() {
+        // un seul pixel blanc en (2, 2) sur fond noir
+        let mut src = vec![0u32; 25];
+        src[12] = 0x00FF_FFFF;
+        let fx = Fx {
+            conv_rx: 1,
+            conv_by: -2,
+            ..Fx::default()
+        };
+        let o = render(&src, 5, 5, &fx, 5, 5, 0);
+        assert_eq!(o[12], Color32::from_rgb(0, 255, 0), "vert seul à sa place");
+        assert_eq!(o[2 * 5 + 3].r(), 255, "rouge 1 px à droite");
+        assert_eq!(o[2].b(), 255, "bleu 2 px plus haut (ligne 0)");
+        assert_eq!(o.iter().filter(|p| **p != Color32::BLACK).count(), 3);
+    }
+
+    #[test]
+    fn tube_sweep_moves_down() {
+        let fx = Fx {
+            sweep: 100,
+            sweep_speed: 10,
+            sweep_width: 20,
+            ..Fx::default()
+        };
+        // période = 1 s = 60 trames ; à la moitié la barre est au milieu de l'image
+        let peak = |frame| {
+            let g = sweep_gains(&fx, 100, frame);
+            (0..100).max_by_key(|&y| g[y]).unwrap()
+        };
+        let (a, b) = (peak(15), peak(30));
+        assert!(a < b && (45..=55).contains(&b), "{a} {b}");
+        let g = sweep_gains(&fx, 100, 30);
+        assert!(g[b] > 256 + 128, "{}", g[b]);
+        assert_eq!(g[99], 256, "hors de la barre : neutre");
+        assert!(sweep_gains(&Fx::default(), 10, 0).iter().all(|&v| v == 256));
+    }
+
+    #[test]
+    fn presets_ignore_tube() {
+        let t = Fx {
+            red: 120,
+            conv_rx: 1,
+            sweep: 40,
+            ..Fx::preset(Preset::SonyTrinitron)
+        };
+        assert_eq!(t.detect(), Some(Preset::SonyTrinitron));
+        let f = Fx::preset(Preset::FadedTube).with_tube_of(&t);
+        assert_eq!((f.red, f.conv_rx, f.sweep), (120, 1, 40));
+        assert_eq!(f.detect(), Some(Preset::FadedTube));
+        assert!(!t.without_tube().tube_active());
+    }
     use super::*;
 
     fn flat(w: usize, h: usize, v: u32) -> Vec<u32> {
@@ -496,7 +708,7 @@ mod tests {
     fn identity_without_filters() {
         let mut src = flat(320, 224, 0);
         src[5] = 0x102030;
-        let o = render(&src, 320, 224, &Fx::default(), 320, 224);
+        let o = render(&src, 320, 224, &Fx::default(), 320, 224, 0);
         assert_eq!(o[5], Color32::from_rgb(0x10, 0x20, 0x30));
         assert_eq!(o[6], Color32::from_rgb(0, 0, 0));
     }
@@ -550,7 +762,7 @@ mod tests {
             interp: SOFT,
             ..Fx::default()
         };
-        for c in render(&src, 320, 224, &fx, 640, 448) {
+        for c in render(&src, 320, 224, &fx, 640, 448, 0) {
             assert_eq!(c, Color32::from_rgb(128, 128, 128));
         }
     }
@@ -563,7 +775,7 @@ mod tests {
             scan: 50,
             ..Fx::default()
         };
-        let o = render(&src, 320, 224, &fx, 320, 448);
+        let o = render(&src, 320, 224, &fx, 320, 448, 0);
         assert_eq!(o[0], Color32::from_rgb(255, 255, 255));
         assert_eq!(o[320], Color32::from_rgb(128, 128, 128));
         assert_eq!(o[640], Color32::from_rgb(255, 255, 255));
@@ -577,12 +789,12 @@ mod tests {
             scan_br: 80,
             ..Fx::default()
         };
-        let dark = render(&flat(320, 224, 0x000000), 320, 224, &fx, 320, 448);
+        let dark = render(&flat(320, 224, 0x000000), 320, 224, &fx, 320, 448, 0);
         assert_eq!(dark[320], Color32::from_rgb(0, 0, 0));
         // blanc : 255 * 204 / 256 au milieu de la ligne
-        let bright = render(&flat(320, 224, 0xFFFFFF), 320, 224, &fx, 320, 448);
+        let bright = render(&flat(320, 224, 0xFFFFFF), 320, 224, &fx, 320, 448, 0);
         assert_eq!(bright[320].r(), 203);
-        let grey = render(&flat(320, 224, 0x808080), 320, 224, &fx, 320, 448);
+        let grey = render(&flat(320, 224, 0x808080), 320, 224, &fx, 320, 448, 0);
         assert!(grey[320].r() < 100 && grey[320].r() > 60);
     }
 
@@ -592,7 +804,7 @@ mod tests {
             gamma: 145,
             ..Fx::default()
         };
-        let o = render(&flat(320, 224, 0x808080), 320, 224, &fx, 320, 224);
+        let o = render(&flat(320, 224, 0x808080), 320, 224, &fx, 320, 224, 0);
         // 255 * (128/255)^1.45 ~ 94
         assert_eq!(o[0].r(), 94);
         // tube fané à l'échelle x5 (1120 -> motif 1080) : le jaune réduit le bleu
@@ -600,7 +812,7 @@ mod tests {
             mask: Mask::FadedYellow,
             ..Fx::default()
         };
-        let o = render(&flat(320, 224, 0x808080), 320, 224, &fx, 1600, 1120);
+        let o = render(&flat(320, 224, 0x808080), 320, 224, &fx, 1600, 1120, 0);
         assert!(o.iter().any(|c| c.b() < c.r()));
     }
 
@@ -622,7 +834,7 @@ mod tests {
     #[test]
     fn render_384x224_identity() {
         let src = flat(384, 224, 0x123456);
-        let o = render(&src, 384, 224, &Fx::default(), 384, 224);
+        let o = render(&src, 384, 224, &Fx::default(), 384, 224, 0);
         assert_eq!(o.len(), 384 * 224);
         for c in &o {
             assert_eq!(*c, Color32::from_rgb(0x12, 0x34, 0x56));
@@ -637,7 +849,7 @@ mod tests {
             scan: 50,
             ..Fx::default()
         };
-        let o = render(&src, 384, 224, &fx, 768, 448);
+        let o = render(&src, 384, 224, &fx, 768, 448, 0);
         assert_eq!(o.len(), 768 * 448);
     }
 
@@ -735,11 +947,11 @@ mod tests {
         for (name, w, h) in cases {
             print!("{name:28} {:>11}", format!("{w}x{h}"));
             for (_, fx) in &presets {
-                let _ = render(&src, 320, 224, fx, w, h); // chauffe + tables
+                let _ = render(&src, 320, 224, fx, w, h, 0); // chauffe + tables
                 let n = 8;
                 let t0 = Instant::now();
                 for _ in 0..n {
-                    std::hint::black_box(render(&src, 320, 224, fx, w, h));
+                    std::hint::black_box(render(&src, 320, 224, fx, w, h, 0));
                 }
                 print!(
                     " {:13.2}",

@@ -326,7 +326,7 @@ impl App {
             let img = egui::ColorImage {
                 size: [w, h],
                 source_size: egui::vec2(w as f32, h as f32),
-                pixels: postfx::render(&s.pixels, s.w, s.h, &fx, w, h),
+                pixels: postfx::render(&s.pixels, s.w, s.h, &fx, w, h, s.frame),
             };
             self.perf.smooth_fx(t0.elapsed().as_secs_f32() * 1000.0);
             match &mut self.fx_tex {
