@@ -12,6 +12,7 @@ pub mod debug;
 pub mod dips;
 pub mod driver;
 pub mod inputs;
+pub mod util;
 pub mod video;
 
 pub use audio::*;
@@ -20,6 +21,7 @@ pub use debug::*;
 pub use dips::*;
 pub use driver::*;
 pub use inputs::*;
+pub use util::*;
 pub use video::*;
 
 #[cfg(test)]
