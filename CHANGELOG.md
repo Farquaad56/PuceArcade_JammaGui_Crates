@@ -1,5 +1,10 @@
 # Changelog
 
+## v0.6.1
+- Son : rééchantillonneur à filtre sinc fenêtré (Kaiser, 32 coefficients, 512 phases) à la place de l'interpolation
+  linéaire. Une source à 24 kHz n'envoie plus d'images spectrales au-dessus de 12 kHz (réjection > 60 dB) :
+  fin du grésillement et image stéréo plus nette. Latence ajoutée : 31 échantillons source (1,3 ms à 24 kHz).
+
 ## v0.6.0
 - `GameEntry::system` (ADR 003) : système du jeu quand un driver en sert plusieurs. « Ouvrir un jeu » affiche
   l'étiquette `[CPS1]` / `[CPS2]` devant le titre et une case par système pour filtrer la liste.
