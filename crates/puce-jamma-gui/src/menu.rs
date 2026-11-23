@@ -37,6 +37,11 @@ pub enum MenuAction {
     OverlayFull(bool),
     OverlayCorner(Corner),
     Filters,
+    /// Mires de réglage : afficher / quitter, mire et variante suivantes, panneau.
+    ToggleMires,
+    MireStep(i32),
+    MireVariant(i32),
+    MirePanel,
     Dips,
     Controls,
     Volume(u8),
@@ -51,8 +56,15 @@ pub fn shortcut(key: Key, m: Modifiers) -> Option<MenuAction> {
     if m.command && key == Key::P {
         return Some(MenuAction::TogglePause);
     }
-    if m.command && key == Key::B {
-        return Some(MenuAction::ToggleBezels);
+    if m.command {
+        match key {
+            Key::B => return Some(MenuAction::ToggleBezels),
+            Key::M => return Some(MenuAction::ToggleMires),
+            Key::H => return Some(MenuAction::MirePanel),
+            Key::PageUp => return Some(MenuAction::MireVariant(-1)),
+            Key::PageDown => return Some(MenuAction::MireVariant(1)),
+            _ => {}
+        }
     }
     if m.any() {
         return None;
@@ -65,6 +77,8 @@ pub fn shortcut(key: Key, m: Modifiers) -> Option<MenuAction> {
         Key::F8 => MenuAction::NextSlot,
         Key::F11 => MenuAction::ToggleFullscreen,
         Key::F12 => MenuAction::Screenshot,
+        Key::PageUp => MenuAction::MireStep(-1),
+        Key::PageDown => MenuAction::MireStep(1),
         _ => return None,
     })
 }
@@ -278,6 +292,13 @@ pub fn show(ui: &mut egui::Ui, st: &MenuState) -> Option<MenuAction> {
         ui.menu_button("Affichage", |ui| display_menu(ui, st, &mut out));
         if ui.button("Filtres").clicked() {
             out = Some(MenuAction::Filters);
+        }
+        if ui
+            .button("Mires")
+            .on_hover_text("Mires de réglage de l'écran et des filtres (Ctrl+M)")
+            .clicked()
+        {
+            out = Some(MenuAction::ToggleMires);
         }
         ui.menu_button("Machine", |ui| machine_menu(ui, st, &mut out));
         let label = if st.debug_open {

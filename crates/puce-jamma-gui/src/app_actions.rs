@@ -43,6 +43,13 @@ impl App {
             MenuAction::OverlayFull(f) => self.prefs.overlay.full = f,
             MenuAction::OverlayCorner(c) => self.prefs.overlay.corner = c,
             MenuAction::Filters => self.fx_win.open = true,
+            MenuAction::ToggleMires => self.toggle_mires(),
+            MenuAction::MireStep(d) if self.mire.state.active => self.mire.state.step(d),
+            MenuAction::MireVariant(d) if self.mire.state.active => self.mire.state.step_variant(d),
+            MenuAction::MirePanel if self.mire.state.active => {
+                self.mire.state.panel = !self.mire.state.panel
+            }
+            MenuAction::MireStep(_) | MenuAction::MireVariant(_) | MenuAction::MirePanel => {}
             MenuAction::Dips => self.dips_win.open = true,
             MenuAction::Controls => self.controls.open = true,
             MenuAction::Volume(v) => self.prefs.audio.volume = v.min(100),

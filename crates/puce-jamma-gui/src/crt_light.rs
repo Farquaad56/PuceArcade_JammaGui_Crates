@@ -206,7 +206,8 @@ pub fn bloom(out: &mut [Color32], w: usize, h: usize, sh: usize, fx: &Fx) {
     let n = 1.0 / (s * s) as f32;
     let glow: Vec<[u32; 3]> = buf
         .iter()
-        .map(|b| b.map(|v| ((v * n).sqrt() * k).min(65_280.0) as u32))
+        // max(0) : la somme glissante du flou laisse de petits négatifs dans le noir (sqrt → NaN)
+        .map(|b| b.map(|v| ((v * n).max(0.0).sqrt() * k).min(65_280.0) as u32))
         .collect();
     let xs: Vec<(usize, usize, u32)> = (0..w)
         .map(|x| {

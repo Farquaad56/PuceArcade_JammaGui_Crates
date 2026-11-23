@@ -47,6 +47,10 @@ Service : 9 ; Test : F2 ; Tilt : aucune touche. Joueurs 3 et 4 : manettes 3 et 4
 | F11, Échap | plein écran / quitter le plein écran |
 | F12 | capture PNG (image native tournée) dans le dossier des sauvegardes |
 | Ctrl+B | bezels en plein écran (activer / désactiver) |
+| Ctrl+M | mires de réglage (afficher / quitter) |
+| Page préc. / Page suiv. | mire précédente / suivante (mires affichées) |
+| Ctrl + Page préc. / suiv. | variante de la mire |
+| Ctrl+H | masquer / montrer le panneau des mires |
 
 ## Filtres vidéo
 
@@ -57,6 +61,16 @@ Menu Affichage > Filtres vidéo. Préréglages : Moniteur d'arcade 15 kHz, Sony 
 - **Couleur** : gamma, niveau du noir, température du blanc (9 300 K = moniteur japonais), canaux RVB ;
 - **Tube** : courbure, vignettage, coins arrondis (sans effet quand un bezel est affiché), halo, convergence ;
 - **Effets** : barre de balayage, instabilité, taches de pureté, images noires (écran 120 Hz ou plus).
+
+## Mires de réglage
+
+Bouton « Mires » de la barre de menus, ou Ctrl+M : la mire remplace l'image du jeu, à sa définition et
+dans son orientation (320 × 240 sans jeu), et passe par les filtres et le bezel. Le jeu est mis en pause
+pendant les mires (désactivable). Mires : géométrie (grille et cercles), convergence (points, croix, grille
+fine), overscan (cadres de 0 à 10 %), barres de couleur (75 % et 100 %), pureté (aplats rouge, vert, bleu,
+blanc, gris, noir), contraste, luminosité (noirs à 2, 5 et 10 %), dégradés RVB, gamma (1.8, 2.2, 2.5),
+netteté (rayures de 1 à 4 px), mouvement. Le panneau rappelle ce que chaque mire permet de régler.
+L'exemple `mires` les enregistre en PNG.
 
 ## Bezels (plein écran)
 

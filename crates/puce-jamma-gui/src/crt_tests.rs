@@ -163,3 +163,21 @@ fn purity_tints_corners_not_center() {
     let c = o[50 * 100 + 50];
     assert!((i32::from(c.r()) - i32::from(c.g())).abs() <= 4);
 }
+
+#[test]
+fn bloom_leaves_black_cells_black_on_a_grid() {
+    // grille fine blanche sur noir : aucun bloc parasite au milieu des cases
+    let (w, h) = (384, 224);
+    let src = crate::mire::render(crate::mire::Mire::Geometry, 0, w, h, 0);
+    let fx = Fx {
+        bloom: 25,
+        ..Fx::default()
+    };
+    let o = render(&src, w, h, &fx, w * 4, h * 4, 0);
+    let max = (40 * 4..45 * 4)
+        .flat_map(|y| (108 * 4..116 * 4).map(move |x| (x, y)))
+        .map(|(x, y)| o[y * w * 4 + x].r())
+        .max()
+        .unwrap_or(0);
+    assert!(max < 80, "pixel parasite : {max}");
+}

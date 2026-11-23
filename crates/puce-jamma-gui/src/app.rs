@@ -67,11 +67,11 @@ pub fn to_color_image(pixels: &[u32], w: usize, h: usize) -> egui::ColorImage {
 }
 
 /// Dernière trame, déjà tournée.
-struct Shown {
-    pixels: Vec<u32>,
-    w: usize,
-    h: usize,
-    frame: u64,
+pub(crate) struct Shown {
+    pub(crate) pixels: Vec<u32>,
+    pub(crate) w: usize,
+    pub(crate) h: usize,
+    pub(crate) frame: u64,
 }
 
 /// Ce qui détermine l'image filtrée en cache.
@@ -117,6 +117,8 @@ pub struct App {
     /// Fréquence mesurée de l'écran (Hz, lissée) et phase de l'insertion d'images noires.
     pub(crate) refresh_hz: f32,
     bfi_black: bool,
+    /// Mires de réglage (affichées à la place du jeu).
+    pub(crate) mire: crate::app_mire::MireView,
     /// Dernier état « débogueur ouvert » transmis au thread d'émulation.
     debug_live_sent: bool,
     sound: Option<Sound>,
@@ -175,6 +177,7 @@ impl App {
             bezel_shown: false,
             refresh_hz: 60.0,
             bfi_black: false,
+            mire: Default::default(),
             debug_live_sent: false,
             sound: sound.map(|out| Sound {
                 resampler: AudioResampler::new(48_000.0, out.rate),
@@ -336,8 +339,13 @@ impl App {
         ctx: &egui::Context,
         l: &DisplayRect,
         fx: Fx,
+        mire: bool,
     ) -> Option<egui::TextureId> {
-        let s = self.shown.as_ref()?;
+        let s = if mire {
+            self.mire.shown.as_ref()?
+        } else {
+            self.shown.as_ref()?
+        };
         if !fx.is_active() {
             self.perf.fx_ms = None;
             return None;
@@ -435,18 +443,26 @@ impl App {
     fn draw_frame(&mut self, ui: &mut egui::Ui) {
         let avail = ui.max_rect();
         self.central_rect = Some(avail);
-        if self.board.is_none() || self.texture.is_none() {
+        let mire = self.mire.state.active;
+        if !mire && (self.board.is_none() || self.texture.is_none()) {
             self.layout = None;
             ui.centered_and_justified(|ui| ui.label("Fichier > Ouvrir un jeu…"));
             return;
         }
         let bezel = self.current_bezel(ui.ctx());
-        let (Some(t), Some(b)) = (self.texture.as_ref().map(|t| t.id()), self.board.as_ref())
-        else {
-            return;
+        let info = match &self.board {
+            Some(b) => effective_info(&b.video, self.prefs.display.rotation_override),
+            None => crate::app_mire::default_info(),
+        };
+        let t = if mire {
+            self.mire_texture(ui.ctx(), &info)
+        } else {
+            match self.texture.as_ref() {
+                Some(t) => t.id(),
+                None => return,
+            }
         };
         let d = &self.prefs.display;
-        let info = effective_info(&b.video, d.rotation_override);
         let ppp = ui.pixels_per_point();
         let uv = egui::Rect::from_min_max(egui::pos2(0.0, 0.0), egui::pos2(1.0, 1.0));
         let l = match bezel {
@@ -473,7 +489,7 @@ impl App {
         } else {
             self.prefs.fx
         };
-        let tex = self.filtered_texture(ui.ctx(), &l, fx).unwrap_or(t);
+        let tex = self.filtered_texture(ui.ctx(), &l, fx, mire).unwrap_or(t);
         let painter = ui.painter_at(avail);
         // images noires : une trame d'écran sur deux, si l'écran est au moins deux fois plus rapide
         let bfi = fx.bfi && self.fx_env().bfi_possible();
@@ -500,6 +516,11 @@ impl App {
                 .as_ref()
                 .map_or(0.0, |b| b.video.refresh_hz as f32),
         }
+    }
+
+    /// Taille de la dernière image du jeu affichée (après rotation).
+    pub(crate) fn shown_size(&self) -> Option<(usize, usize)> {
+        self.shown.as_ref().map(|s| (s.w, s.h))
     }
 
     pub(crate) fn scale_info(&self) -> String {

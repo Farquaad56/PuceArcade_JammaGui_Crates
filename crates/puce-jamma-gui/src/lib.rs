@@ -59,6 +59,7 @@ pub fn run(driver: Box<dyn BoardDriver>, opts: AppOptions) -> Result<(), String>
 
 pub mod app;
 mod app_actions;
+mod app_mire;
 mod app_panels;
 pub mod audio;
 pub mod bezel;
@@ -79,6 +80,9 @@ pub mod gamepad;
 pub mod games;
 pub mod input;
 pub mod menu;
+pub mod mire;
+mod mire_canvas;
+pub mod mire_menu;
 pub mod overlay;
 pub mod pixel2x;
 pub mod postfx;

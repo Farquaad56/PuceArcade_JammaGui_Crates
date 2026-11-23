@@ -26,7 +26,13 @@
 - API : `FxWindow::show` prend un `FxEnv` (bezel affiché, fréquences de l'écran et du jeu) ; `Fx` gagne
   `beam_dk`, `beam_br`, `mask_pitch`, `temp`, `black`, `bloom`, `bloom_size`, `overscan`, `curve`,
   `vignette`, `corner`, `jitter`, `purity`, `bfi` ; `ScanMode::Gaussian`, `Mask::Slot`, `Mask::Shadow`.
-- Exemples `crt_demo` (aperçu du préréglage arcade) et `fx_bench` (coût par trame).
+- Mires de réglage (`mire.rs`, `mire_menu.rs`) : bouton « Mires » et Ctrl+M ; géométrie, convergence,
+  overscan, barres de couleur, pureté, contraste, luminosité, dégradés, gamma, netteté, mouvement, avec
+  variantes ; à la définition du jeu, à travers les filtres et le bezel ; jeu en pause pendant les mires ;
+  Page préc. / suiv. (mire), Ctrl + Page (variante), Ctrl+H (panneau).
+- Halo : blocs blancs parasites dans les zones noires (racine d'un négatif de la somme glissante du flou)
+  corrigés.
+- Exemples `crt_demo` (aperçu du préréglage arcade), `fx_bench` (coût par trame) et `mires` (mires en PNG).
 
 ## v0.3.0
 

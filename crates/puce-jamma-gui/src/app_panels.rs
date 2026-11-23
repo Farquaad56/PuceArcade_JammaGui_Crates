@@ -34,6 +34,7 @@ impl App {
     }
 
     pub(crate) fn windows(&mut self, ctx: &egui::Context) {
+        self.mire_panel(ctx);
         if let Some(g) = self.games_win.show(ctx, &self.driver.games()) {
             self.load_game(&g);
         }
