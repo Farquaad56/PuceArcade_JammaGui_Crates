@@ -8,9 +8,6 @@ use crate::app::{App, Shown};
 use crate::mire::{self, Mire};
 use crate::mire_menu::{MireCmd, MireState};
 
-/// Marque des numéros de trame des mires (cache des filtres distinct de celui du jeu).
-const MIRE_FRAME: u64 = 1 << 62;
-
 #[derive(Default)]
 pub(crate) struct MireView {
     pub(crate) state: MireState,
@@ -79,7 +76,7 @@ impl App {
         }
         // trame changeante : barre de balayage et instabilité animées même sur une mire fixe
         if let Some(sh) = &mut m.shown {
-            sh.frame = MIRE_FRAME | m.state.frame;
+            sh.frame = m.state.frame;
         }
         m.tex
             .as_ref()

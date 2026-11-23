@@ -131,7 +131,8 @@ fn jitter_dx(fx: &Fx, y: usize, h: usize, sh: usize, frame: u64) -> f32 {
         return 0.0;
     }
     let amp = f32::from(fx.jitter.min(100)) / 100.0 * (h as f32 / sh.max(1) as f32) * 0.6;
-    let t = frame as f32;
+    // numéro de trame réduit avant le passage en f32 (précision des grands numéros)
+    let t = (frame % 1_000_000) as f32;
     let line = y as f32 * sh as f32 / h as f32;
     // ondulation lente + petit bruit par ligne de l'image d'origine
     let hash =

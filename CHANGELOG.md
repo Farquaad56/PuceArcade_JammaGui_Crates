@@ -30,6 +30,8 @@
   overscan, barres de couleur, pureté, contraste, luminosité, dégradés, gamma, netteté, mouvement, avec
   variantes ; à la définition du jeu, à travers les filtres et le bezel ; jeu en pause pendant les mires ;
   Page préc. / suiv. (mire), Ctrl + Page (variante), Ctrl+H (panneau).
+- Barre de balayage et instabilité animées aussi sur les mires et après de longues parties (numéro de
+  trame réduit en entier avant le calcul en f32).
 - Halo : blocs blancs parasites dans les zones noires (racine d'un négatif de la somme glissante du flou)
   corrigés.
 - Exemples `crt_demo` (aperçu du préréglage arcade), `fx_bench` (coût par trame) et `mires` (mires en PNG).

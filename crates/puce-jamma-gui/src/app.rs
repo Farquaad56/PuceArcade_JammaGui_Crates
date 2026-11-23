@@ -77,6 +77,8 @@ pub(crate) struct Shown {
 /// Ce qui détermine l'image filtrée en cache.
 #[derive(Clone, Copy, PartialEq)]
 struct FxKey {
+    /// Image d'une mire (et non du jeu) : caches distincts à numéro de trame égal.
+    mire: bool,
     frame: u64,
     px: (u32, u32),
     fx: Fx,
@@ -351,6 +353,7 @@ impl App {
             return None;
         }
         let key = FxKey {
+            mire,
             frame: s.frame,
             px: l.px,
             fx,

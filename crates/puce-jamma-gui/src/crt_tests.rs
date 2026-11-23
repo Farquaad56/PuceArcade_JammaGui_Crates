@@ -181,3 +181,28 @@ fn bloom_leaves_black_cells_black_on_a_grid() {
         .unwrap_or(0);
     assert!(max < 80, "pixel parasite : {max}");
 }
+
+#[test]
+fn sweep_and_jitter_animate_at_large_frame_numbers() {
+    // mires et longues parties : les numéros de trame grands doivent encore animer les effets
+    let fx = Fx {
+        sweep: 80,
+        ..Fx::default()
+    };
+    let big = 1u64 << 40;
+    assert_ne!(
+        crate::postfx::sweep_gains(&fx, 100, big),
+        crate::postfx::sweep_gains(&fx, 100, big + 30)
+    );
+    let src: Vec<u32> = (0..64 * 32)
+        .map(|i| if i % 3 == 0 { 0xFF_FFFF } else { 0 })
+        .collect();
+    let j = Fx {
+        jitter: 100,
+        ..Fx::default()
+    };
+    assert_ne!(
+        render(&src, 64, 32, &j, 256, 128, big),
+        render(&src, 64, 32, &j, 256, 128, big + 7)
+    );
+}

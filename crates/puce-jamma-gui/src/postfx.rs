@@ -721,8 +721,10 @@ pub fn sweep_gains(fx: &Fx, h: usize, frame: u64) -> Vec<u32> {
     if fx.sweep == 0 || h == 0 {
         return g;
     }
-    let period = (f32::from(fx.sweep_speed.clamp(5, 100)) / 10.0 * SWEEP_FPS).max(1.0);
-    let phase = (frame as f32 % period) / period;
+    // période entière en trames (dixièmes de seconde × 6) : modulo en entier, sans perte de
+    // précision quand le numéro de trame devient grand
+    let period = (u64::from(fx.sweep_speed.clamp(5, 100)) * SWEEP_FPS as u64 / 10).max(1);
+    let phase = (frame % period) as f32 / period as f32;
     let band = (f32::from(fx.sweep_width.clamp(2, 50)) / 100.0 * h as f32).max(2.0);
     // la barre entre par le haut et sort par le bas : parcours h + bande
     let center = phase * (h as f32 + band) - band / 2.0;
