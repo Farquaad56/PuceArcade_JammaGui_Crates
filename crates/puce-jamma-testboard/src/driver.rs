@@ -36,6 +36,7 @@ impl BoardDriver for TestDriver {
                 available: true,
                 supported: true,
                 kind: GameKind::Original,
+                system: String::new(),
             },
             GameEntry {
                 name: "mire_v".to_string(),
@@ -44,6 +45,7 @@ impl BoardDriver for TestDriver {
                 available: true,
                 supported: true,
                 kind: GameKind::Original,
+                system: String::new(),
             },
         ]
     }

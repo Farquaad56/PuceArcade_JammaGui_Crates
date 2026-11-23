@@ -1,5 +1,11 @@
 # Changelog
 
+## v0.6.0
+- `GameEntry::system` (ADR 003) : système du jeu quand un driver en sert plusieurs. « Ouvrir un jeu » affiche
+  l'étiquette `[CPS1]` / `[CPS2]` devant le titre et une case par système pour filtrer la liste.
+- Changement cassant : les drivers qui construisent `GameEntry` littéralement ajoutent `system` (vide si un seul
+  système).
+
 ## v0.5.0
 
 - Contrat (ADR 002) : `GameEntry` gagne `kind: GameKind` (`Original`, `Clone`, `Bootleg`, `Hack`, `Prototype`) ;

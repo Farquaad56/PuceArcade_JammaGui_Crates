@@ -15,6 +15,8 @@ pub struct GameEntry {
     pub supported: bool,
     /// Catégorie : original, clone officiel, bootleg, hack ou prototype (ADR 002).
     pub kind: GameKind,
+    /// Système du jeu quand un driver en sert plusieurs (« CPS1 », « CPS2 »…), vide sinon (ADR 003).
+    pub system: String,
 }
 
 /// Catégorie d'un jeu du catalogue (ADR 002).

@@ -29,6 +29,8 @@ pub struct GameFilter {
     pub only_available: bool,
     /// Catégories affichées, dans l'ordre de `GameKind::ALL`.
     pub kinds: [bool; 5],
+    /// Systèmes masqués (ADR 003) ; vide : tous affichés.
+    pub hidden_systems: Vec<String>,
 }
 
 impl Default for GameFilter {
@@ -37,6 +39,7 @@ impl Default for GameFilter {
             text: String::new(),
             only_available: false,
             kinds: [true; 5],
+            hidden_systems: Vec::new(),
         }
     }
 }
@@ -49,6 +52,7 @@ pub fn game_rows<'a>(games: &'a [GameEntry], f: &GameFilter) -> Vec<&'a GameEntr
         .iter()
         .filter(|g| !f.only_available || g.available)
         .filter(|g| f.kinds[kind_index(g.kind)])
+        .filter(|g| !f.hidden_systems.contains(&g.system))
         .filter(|g| {
             t.is_empty()
                 || g.name.to_lowercase().contains(&t)
@@ -64,6 +68,22 @@ pub fn kind_counts(games: &[GameEntry]) -> [usize; 5] {
         n[kind_index(g.kind)] += 1;
     }
     n
+}
+
+/// Systèmes du catalogue avec leur nombre de jeux, dans l'ordre d'apparition ; vide si le catalogue
+/// n'a qu'un système (ou aucun renseigné) : pas de filtre ni d'étiquette à afficher.
+pub fn system_counts(games: &[GameEntry]) -> Vec<(String, usize)> {
+    let mut out: Vec<(String, usize)> = Vec::new();
+    for g in games.iter().filter(|g| !g.system.is_empty()) {
+        match out.iter_mut().find(|(s, _)| *s == g.system) {
+            Some((_, n)) => *n += 1,
+            None => out.push((g.system.clone(), 1)),
+        }
+    }
+    if out.len() < 2 {
+        out.clear();
+    }
+    out
 }
 
 #[derive(Default)]
@@ -93,6 +113,26 @@ impl GamesWindow {
         });
     }
 
+    /// Cases des systèmes (une par système), si le catalogue en a plusieurs.
+    fn system_filters(&mut self, ui: &mut egui::Ui, systems: &[(String, usize)]) {
+        if systems.is_empty() {
+            return;
+        }
+        ui.horizontal_wrapped(|ui| {
+            ui.label("Système");
+            for (sys, n) in systems {
+                let mut shown = !self.filter.hidden_systems.contains(sys);
+                if ui.checkbox(&mut shown, format!("{sys} ({n})")).changed() {
+                    if shown {
+                        self.filter.hidden_systems.retain(|s| s != sys);
+                    } else {
+                        self.filter.hidden_systems.push(sys.clone());
+                    }
+                }
+            }
+        });
+    }
+
     /// Affiche la liste ; renvoie le nom du jeu choisi.
     pub fn show(&mut self, ctx: &egui::Context, games: &[GameEntry]) -> Option<String> {
         if !self.open {
@@ -109,6 +149,8 @@ impl GamesWindow {
                     ui.text_edit_singleline(&mut self.filter.text);
                     ui.checkbox(&mut self.filter.only_available, "Disponibles seulement");
                 });
+                let systems = system_counts(games);
+                self.system_filters(ui, &systems);
                 self.kind_filters(ui, games);
                 ui.separator();
                 let rows = game_rows(games, &self.filter);
@@ -116,7 +158,12 @@ impl GamesWindow {
                 egui::ScrollArea::vertical().show(ui, |ui| {
                     for g in rows {
                         let indent = if g.parent.is_empty() { "" } else { "    " };
-                        let mut text = format!("{indent}● {}  ({})", g.title, g.name);
+                        let sys = if systems.is_empty() || g.system.is_empty() {
+                            String::new()
+                        } else {
+                            format!("[{}] ", g.system)
+                        };
+                        let mut text = format!("{indent}● {sys}{}  ({})", g.title, g.name);
                         if !g.supported {
                             text.push_str("  [non pris en charge]");
                         }
@@ -149,6 +196,7 @@ mod tests {
             available,
             supported: true,
             kind,
+            system: String::new(),
         }
     }
 
@@ -201,5 +249,31 @@ mod tests {
             kind_color(GameKind::Original),
             kind_color(GameKind::Bootleg)
         );
+    }
+
+    #[test]
+    fn filter_by_system() {
+        let mut list = vec![
+            g("sf2", "", true, GameKind::Original),
+            g("ssf2", "", true, GameKind::Original),
+            g("xmcota", "", true, GameKind::Original),
+        ];
+        list[0].system = "CPS1".into();
+        list[1].system = "CPS2".into();
+        list[2].system = "CPS2".into();
+        assert_eq!(
+            system_counts(&list),
+            vec![("CPS1".to_string(), 1), ("CPS2".to_string(), 2)]
+        );
+        let f = GameFilter {
+            hidden_systems: vec!["CPS1".into()],
+            ..Default::default()
+        };
+        assert_eq!(names(game_rows(&list, &f)), ["ssf2", "xmcota"]);
+        // un seul système : ni filtre ni étiquette
+        list[0].system = "CPS2".into();
+        assert!(system_counts(&list).is_empty());
+        list.iter_mut().for_each(|e| e.system.clear());
+        assert!(system_counts(&list).is_empty());
     }
 }
