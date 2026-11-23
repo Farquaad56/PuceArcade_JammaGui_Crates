@@ -71,7 +71,9 @@ pub trait BoardDebug {
 }
 // driver.rs — catalogue et chargement (côté « système »)
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub struct GameEntry { pub name: String, pub title: String, pub parent: String, pub available: bool, pub supported: bool }
+pub struct GameEntry { pub name: String, pub title: String, pub parent: String, pub available: bool, pub supported: bool,
+                       pub kind: GameKind }                  // v0.5, ADR 002
+pub enum GameKind { Original, Clone, Bootleg, Hack, Prototype } // GameKind::from_mame(parent, constructeur, titre)
 pub trait BoardDriver: Send + Sync {
     fn system_name(&self) -> &str;
     fn games(&self) -> Vec<GameEntry>;                    // triés dans l'ordre d'affichage voulu par le système

@@ -63,7 +63,8 @@ pub struct MonDriver { roms: PathBuf, saves: PathBuf }
 
 impl BoardDriver for MonDriver {
     fn system_name(&self) -> &str { "Mon système" }
-    fn games(&self) -> Vec<GameEntry> { /* nom, titre, parent, available (ROM présentes), supported */ }
+    fn games(&self) -> Vec<GameEntry> { /* nom, titre, parent, available (ROM présentes), supported,
+                                          kind: GameKind::from_mame(parent, constructeur, titre) */ }
     fn default_game(&self) -> Option<String> { Some("monjeu".into()) }
     fn load(&self, name: &str) -> Result<Box<dyn JammaBoard>, String> { /* appelé DANS le thread d'émulation */ }
     fn saves_dir(&self) -> PathBuf { self.saves.clone() }   // savestates <jeu>.s<n>, captures <jeu>_<trame>.png, DIP <jeu>.dips

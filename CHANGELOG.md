@@ -1,5 +1,14 @@
 # Changelog
 
+## v0.5.0
+
+- Contrat (ADR 002) : `GameEntry` gagne `kind: GameKind` (`Original`, `Clone`, `Bootleg`, `Hack`, `Prototype`) ;
+  `GameKind::from_mame(parent, constructeur, titre)` donne la règle de classement commune aux drivers,
+  `GameKind::commercial()` vaut vrai pour les originaux et les clones officiels.
+- « Ouvrir un jeu » : code couleur par catégorie (blanc : originaux, bleu : clones officiels, orange : bootlegs,
+  magenta : hacks, jaune : prototypes), cases à cocher par catégorie avec le nombre de jeux (légende et
+  filtre), boutons « Commerciaux seulement » et « Tout afficher », nombre de jeux affichés.
+
 ## v0.4.0
 
 - Fenêtre « Filtres vidéo » réorganisée : préréglage et « Tout désactiver » en tête, puis cinq onglets

@@ -3,7 +3,7 @@
 use std::path::{Path, PathBuf};
 
 use puce_jamma::board::JammaBoard;
-use puce_jamma::driver::{BoardDriver, GameEntry};
+use puce_jamma::driver::{BoardDriver, GameEntry, GameKind};
 use puce_jamma::video::Rotation;
 
 use crate::TestBoard;
@@ -35,6 +35,7 @@ impl BoardDriver for TestDriver {
                 parent: "".to_string(),
                 available: true,
                 supported: true,
+                kind: GameKind::Original,
             },
             GameEntry {
                 name: "mire_v".to_string(),
@@ -42,6 +43,7 @@ impl BoardDriver for TestDriver {
                 parent: "".to_string(),
                 available: true,
                 supported: true,
+                kind: GameKind::Original,
             },
         ]
     }

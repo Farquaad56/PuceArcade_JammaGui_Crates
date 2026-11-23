@@ -52,6 +52,13 @@ Service : 9 ; Test : F2 ; Tilt : aucune touche. Joueurs 3 et 4 : manettes 3 et 4
 | Ctrl + Page préc. / suiv. | variante de la mire |
 | Ctrl+H | masquer / montrer le panneau des mires |
 
+## Ouvrir un jeu
+
+Fichier > Ouvrir un jeu : filtre par texte, par disponibilité des ROM et par catégorie. Code couleur : blanc pour
+les originaux, bleu pour les clones officiels (régions, révisions), orange pour les bootlegs, magenta pour les
+hacks, jaune pour les prototypes. « Commerciaux seulement » ne garde que les originaux et les clones officiels.
+La catégorie vient du driver (`GameEntry::kind`, règle commune `GameKind::from_mame`).
+
 ## Filtres vidéo
 
 Menu Affichage > Filtres vidéo. Préréglages : Moniteur d'arcade 15 kHz, Sony Trinitron, Tube fané. Onglets :
