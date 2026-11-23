@@ -9,6 +9,7 @@ use std::sync::OnceLock;
 
 use eframe::egui::Color32;
 
+use crate::crt::MAX_THREADS;
 use crate::pixel2x::{self, Scaler};
 use crate::{crt, crt_light};
 
@@ -673,7 +674,7 @@ pub fn render(
     } else {
         std::thread::available_parallelism()
             .map_or(1, |n| n.get())
-            .min(8)
+            .min(MAX_THREADS)
     };
     if threads <= 1 {
         render_rows(&ctx, 0, &mut out);

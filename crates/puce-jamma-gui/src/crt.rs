@@ -7,6 +7,9 @@ use eframe::egui::Color32;
 
 use crate::postfx::{Fx, Mask};
 
+/// Nombre maximal de fils pour les filtres (au-delà, le gain est faible et la mémoire limite).
+pub const MAX_THREADS: usize = 16;
+
 /// Applique `f(y, rangée)` à toutes les rangées de `out`, sur plusieurs fils pour les grandes images.
 pub fn par_rows(out: &mut [Color32], w: usize, f: impl Fn(usize, &mut [Color32]) + Sync) {
     let h = out.len() / w.max(1);
@@ -15,7 +18,7 @@ pub fn par_rows(out: &mut [Color32], w: usize, f: impl Fn(usize, &mut [Color32])
     } else {
         std::thread::available_parallelism()
             .map_or(1, |n| n.get())
-            .min(8)
+            .min(MAX_THREADS)
     };
     let per = h.div_ceil(threads).max(1);
     std::thread::scope(|s| {

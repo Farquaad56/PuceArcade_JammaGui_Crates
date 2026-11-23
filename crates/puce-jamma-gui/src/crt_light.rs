@@ -8,7 +8,7 @@
 
 use eframe::egui::Color32;
 
-use crate::crt::par_rows;
+use crate::crt::{par_rows, MAX_THREADS};
 use crate::postfx::{Fx, NEUTRAL_TEMP};
 
 /// Couleur du blanc à `kelvin` (approximation de Tanner Helland), composantes 0 à 1.
@@ -248,7 +248,7 @@ fn downsample(out: &[Color32], w: usize, s: usize, bw: usize, bh: usize) -> Vec<
     let h = out.len() / w;
     let threads = std::thread::available_parallelism()
         .map_or(1, |n| n.get())
-        .min(8);
+        .min(MAX_THREADS);
     let per = bh.div_ceil(threads).max(1);
     let sq = &sq;
     std::thread::scope(|sc| {
