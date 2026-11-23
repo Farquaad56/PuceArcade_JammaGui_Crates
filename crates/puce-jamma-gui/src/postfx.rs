@@ -764,6 +764,9 @@ fn tube(out: &mut [Color32], w: usize, h: usize, fx: &Fx, frame: u64) {
     let sweep = sweep_gains(fx, h, frame);
     for y in 0..h {
         let sg = sweep[y];
+        // lueur additive du faisceau dans la barre (visible aussi sur le noir) : jusqu'à
+        // 24 / 255 au centre pour une intensité de 100 %
+        let lift = sg.saturating_sub(256) * 40 / 256;
         for x in 0..w {
             let p = out[y * w + x];
             let (r, g, b) = if conv {
@@ -775,7 +778,9 @@ fn tube(out: &mut [Color32], w: usize, h: usize, fx: &Fx, frame: u64) {
             } else {
                 (p.r(), p.g(), p.b())
             };
-            let f = |v: u8, cg: u32| ((u32::from(v) * cg * sg + (1 << 15)) >> 16).min(255) as u8;
+            let f = |v: u8, cg: u32| {
+                (((u32::from(v) * cg * sg + (1 << 15)) >> 16) + lift).min(255) as u8
+            };
             out[y * w + x] = Color32::from_rgb(f(r, gr), f(g, gg), f(b, gb));
         }
     }
@@ -836,6 +841,21 @@ mod tests {
         assert!(g[b] > 256 + 128, "{}", g[b]);
         assert_eq!(g[99], 256, "hors de la barre : neutre");
         assert!(sweep_gains(&Fx::default(), 10, 0).iter().all(|&v| v == 256));
+    }
+
+    #[test]
+    fn tube_sweep_is_visible_on_black() {
+        // mires sur fond noir : la barre éclaire aussi le noir
+        let fx = Fx {
+            sweep: 45,
+            sweep_speed: 10,
+            sweep_width: 20,
+            ..Fx::default()
+        };
+        let o = render(&flat(16, 100, 0), 16, 100, &fx, 16, 100, 30);
+        let peak = (0..100).map(|y| o[y * 16].r()).max().unwrap_or(0);
+        assert!(peak >= 8, "barre sur le noir : {peak}");
+        assert_eq!(o[99 * 16].r(), 0, "hors de la barre : noir");
     }
 
     #[test]
