@@ -118,6 +118,25 @@ pub struct Geometry {
 }
 
 impl Bezel {
+    /// Pixels RGBA à afficher : tels quels avec la vitre (reflets semi-transparents sur l'écran),
+    /// sinon l'écran rendu entièrement transparent (alpha 0 là où il est sous le seuil).
+    pub fn pixels(&self, glass: bool) -> std::borrow::Cow<'_, [u8]> {
+        if glass {
+            return std::borrow::Cow::Borrowed(&self.rgba);
+        }
+        let mut v = self.rgba.clone();
+        let (x0, y0, x1, y1) = self.hole;
+        for y in y0..y1.min(self.h) {
+            for x in x0..x1.min(self.w) {
+                let a = &mut v[(y * self.w + x) * 4 + 3];
+                if *a < HOLE_ALPHA {
+                    *a = 0;
+                }
+            }
+        }
+        std::borrow::Cow::Owned(v)
+    }
+
     pub fn geometry(&self) -> Geometry {
         Geometry {
             w: self.w,
@@ -170,6 +189,21 @@ mod tests {
             }
         }
         v
+    }
+
+    #[test]
+    fn glass_can_be_removed() {
+        let (w, h) = (40, 20);
+        let b = Bezel {
+            w,
+            h,
+            rgba: frame(),
+            hole: find_hole(w, h, &frame()).unwrap(),
+        };
+        assert_eq!(b.pixels(true)[(10 * w + 20) * 4 + 3], 36);
+        let p = b.pixels(false);
+        assert_eq!(p[(10 * w + 20) * 4 + 3], 0);
+        assert_eq!(p[3], 255, "cadre opaque inchangé");
     }
 
     #[test]

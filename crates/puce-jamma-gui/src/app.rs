@@ -408,16 +408,20 @@ impl App {
             if let Ok(r) = rx.try_recv() {
                 self.bezel.rx = None;
                 match r {
-                    Ok(bz) => {
-                        let img = egui::ColorImage::from_rgba_unmultiplied([bz.w, bz.h], &bz.rgba);
-                        let tex = ctx.load_texture("bezel", img, egui::TextureOptions::LINEAR);
-                        self.bezel.ready = Some((tex, bz.geometry()));
-                    }
+                    Ok(bz) => self.bezel.image = Some(bz),
                     Err(e) => self.error = Some(format!("Bezel : {e}")),
                 }
             }
         }
-        self.bezel.ready.as_ref().map(|(t, g)| (t.id(), *g))
+        let glass = self.prefs.display.bezel_glass;
+        if let Some(bz) = &self.bezel.image {
+            if self.bezel.ready.as_ref().map(|r| r.2) != Some(glass) {
+                let img = egui::ColorImage::from_rgba_unmultiplied([bz.w, bz.h], &bz.pixels(glass));
+                let tex = ctx.load_texture("bezel", img, egui::TextureOptions::LINEAR);
+                self.bezel.ready = Some((tex, bz.geometry(), glass));
+            }
+        }
+        self.bezel.ready.as_ref().map(|(t, g, _)| (t.id(), *g))
     }
 
     fn draw_frame(&mut self, ui: &mut egui::Ui) {
@@ -628,5 +632,8 @@ struct BezelState {
     /// Jeu pour lequel le bezel a été demandé.
     game: Option<String>,
     rx: Option<Receiver<Result<bezel::Bezel, String>>>,
-    ready: Option<(egui::TextureHandle, bezel::Geometry)>,
+    /// Image chargée, gardée pour refaire la texture quand l'option de la vitre change.
+    image: Option<bezel::Bezel>,
+    /// Texture prête et option de la vitre avec laquelle elle a été faite.
+    ready: Option<(egui::TextureHandle, bezel::Geometry, bool)>,
 }

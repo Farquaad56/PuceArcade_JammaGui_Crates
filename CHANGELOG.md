@@ -1,5 +1,10 @@
 # Changelog
 
+## Non publié
+
+- Bezels : option « Reflets de la vitre » (menu Affichage, préférence `[display] bezel_glass`, activée par défaut) ;
+  désactivée, l'écran du bezel devient entièrement transparent (`Bezel::pixels(glass)`).
+
 ## v0.3.0
 
 - Bezels RetroArch en plein écran (`puce_jamma_gui::bezel`) : `<jeu>.cfg` puis parent puis `_generic.cfg`

@@ -31,6 +31,8 @@ pub enum MenuAction {
     /// Bezels en plein écran.
     Bezels(bool),
     ToggleBezels,
+    /// Reflets de la vitre du bezel sur l'image.
+    BezelGlass(bool),
     Overlay(bool),
     OverlayFull(bool),
     OverlayCorner(Corner),
@@ -206,6 +208,16 @@ fn display_menu(ui: &mut egui::Ui, st: &MenuState, out: &mut Option<MenuAction>)
         .changed()
     {
         *out = Some(MenuAction::Bezels(bz));
+    }
+    let mut glass = d.bezel_glass;
+    if ui
+        .add_enabled(
+            d.bezels,
+            egui::Checkbox::new(&mut glass, "Reflets de la vitre"),
+        )
+        .changed()
+    {
+        *out = Some(MenuAction::BezelGlass(glass));
     }
     ui.separator();
     let o = st.overlay;

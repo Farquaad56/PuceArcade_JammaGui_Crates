@@ -39,6 +39,8 @@ pub struct DisplayPrefs {
     pub rotation_override: Option<Rotation>,
     /// Bezels RetroArch en plein écran (activés par défaut, s'il en existe pour le jeu).
     pub bezels: bool,
+    /// Vitre du bezel (reflets semi-transparents dessinés sur l'image du jeu).
+    pub bezel_glass: bool,
 }
 
 impl Default for DisplayPrefs {
@@ -50,6 +52,7 @@ impl Default for DisplayPrefs {
             smooth: false,
             rotation_override: None,
             bezels: true,
+            bezel_glass: true,
         }
     }
 }
@@ -204,7 +207,7 @@ impl Prefs {
     pub fn to_toml(&self) -> String {
         let d = &self.display;
         let mut s = format!(
-            "[display]\nscale = \"{}\"\nfullscreen = {}\naspect = \"{}\"\nsmooth = {}\nrotation = \"{}\"\nbezels = {}\n",
+            "[display]\nscale = \"{}\"\nfullscreen = {}\naspect = \"{}\"\nsmooth = {}\nrotation = \"{}\"\nbezels = {}\nbezel_glass = {}\n",
             scale_to_str(d.scale),
             d.fullscreen,
             match d.aspect {
@@ -213,7 +216,7 @@ impl Prefs {
             },
             d.smooth,
             rotation_str(d.rotation_override)
-            , d.bezels
+            , d.bezels, d.bezel_glass
         );
         if let Some(n) = self.input.mouse_sens {
             s.push_str(&format!("\n[input]\nmouse_sensitivity = {n}\n"));
@@ -310,6 +313,11 @@ impl Prefs {
                 ("display", "bezels") => {
                     if let Some(b) = parse_bool(v) {
                         p.display.bezels = b;
+                    }
+                }
+                ("display", "bezel_glass") => {
+                    if let Some(b) = parse_bool(v) {
+                        p.display.bezel_glass = b;
                     }
                 }
                 ("input", "mouse_sensitivity") => {
@@ -480,6 +488,7 @@ mod tests {
                 smooth: true,
                 rotation_override: Some(Rotation::Rot270),
                 bezels: false,
+                bezel_glass: false,
             },
             input: InputPrefs {
                 keys: vec![

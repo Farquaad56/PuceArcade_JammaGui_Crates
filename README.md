@@ -54,6 +54,6 @@ Le frontal affiche en plein écran les bezels au format RetroArch : un fichier `
 `overlay0_overlay = image.png`) et son image PNG, dans le dossier `bezels_dir` passé à `AppOptions`.
 Recherche : le jeu, puis son parent, puis `_generic.cfg`. L'écran du bezel est la zone où l'alpha est
 inférieur à 128 autour du centre ; l'image du jeu le remplit si ses proportions sont à moins de 5 %, sinon
-elle y est centrée. La vitre semi-transparente du bezel (reflets) est dessinée par-dessus le jeu.
+elle y est centrée. La vitre semi-transparente du bezel (reflets) est dessinée par-dessus le jeu. Elle se désactive par la case « Reflets de la vitre » du menu Affichage.
 Case « Bezels en plein écran » dans le menu Affichage, ou Ctrl+B ; le choix est gardé dans `prefs.toml`.
 
