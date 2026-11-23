@@ -77,7 +77,8 @@ use puce_jamma_gui::{run, AppOptions};
 
 fn main() {
     let driver = MonDriver { roms: "roms".into(), saves: "saves".into() };
-    let opts = AppOptions { window_title: "Mon émulateur".into(), config_dir: ".".into() };
+    // bezels_dir : dossier de bezels RetroArch (<jeu>.cfg + PNG), affichés en plein écran (Ctrl+B)
+    let opts = AppOptions { window_title: "Mon émulateur".into(), config_dir: ".".into(), bezels_dir: Some("bezels".into()) };
     if let Err(e) = run(Box::new(driver), opts) {
         eprintln!("{e}");
         std::process::exit(1);

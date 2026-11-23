@@ -28,6 +28,9 @@ pub enum MenuAction {
     Fullscreen(bool),
     ToggleFullscreen,
     Smooth(bool),
+    /// Bezels en plein écran.
+    Bezels(bool),
+    ToggleBezels,
     Overlay(bool),
     OverlayFull(bool),
     OverlayCorner(Corner),
@@ -45,6 +48,9 @@ pub enum MenuAction {
 pub fn shortcut(key: Key, m: Modifiers) -> Option<MenuAction> {
     if m.command && key == Key::P {
         return Some(MenuAction::TogglePause);
+    }
+    if m.command && key == Key::B {
+        return Some(MenuAction::ToggleBezels);
     }
     if m.any() {
         return None;
@@ -193,6 +199,13 @@ fn display_menu(ui: &mut egui::Ui, st: &MenuState, out: &mut Option<MenuAction>)
     let mut smooth = d.smooth;
     if ui.checkbox(&mut smooth, "Lissage bilinéaire").changed() {
         *out = Some(MenuAction::Smooth(smooth));
+    }
+    let mut bz = d.bezels;
+    if ui
+        .checkbox(&mut bz, "Bezels en plein écran (Ctrl+B)")
+        .changed()
+    {
+        *out = Some(MenuAction::Bezels(bz));
     }
     ui.separator();
     let o = st.overlay;

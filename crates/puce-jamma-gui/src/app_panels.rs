@@ -24,6 +24,10 @@ impl App {
             ms: self.perf.avg(30),
             fps: Some(self.perf.fps),
             scale: Some(&scale),
+            audio: self
+                .board
+                .as_ref()
+                .map(|b| (b.audio.sample_rate, u32::from(b.audio.channels))),
             paused: self.paused,
             stopped: self.board.is_none(),
         })

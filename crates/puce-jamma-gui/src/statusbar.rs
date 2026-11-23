@@ -13,6 +13,8 @@ pub struct StatusInfo<'a> {
     pub ms: Option<f32>,
     pub fps: Option<f32>,
     pub scale: Option<&'a str>,
+    /// Son de la carte : fréquence (Hz) et nombre de voies.
+    pub audio: Option<(f64, u32)>,
     pub paused: bool,
     pub stopped: bool,
 }
@@ -33,6 +35,16 @@ pub fn format_status(s: &StatusInfo) -> String {
         s.fps
             .map_or_else(|| MISSING.into(), |f| format!("{f:.1} fps")),
         or(s.scale),
+        s.audio.map_or_else(
+            || MISSING.into(),
+            |(hz, ch)| {
+                format!(
+                    "son {:.0} Hz {}",
+                    hz,
+                    if ch >= 2 { "stéréo" } else { "mono" }
+                )
+            },
+        ),
         match (s.stopped, s.paused) {
             (true, _) => "ARRÊT",
             (false, true) => "PAUSE",
@@ -57,12 +69,13 @@ mod tests {
             ms: Some(4.103),
             fps: Some(59.19),
             scale: Some("x3 (960x672)"),
+            audio: Some((24038.46, 2)),
             paused: false,
             stopped: false,
         };
         assert_eq!(
             format_status(&s),
-            "Capcom CPS1 · ghouls · 384×224 · 4.10 ms/trame · 59.2 fps · x3 (960x672) · MARCHE"
+            "Capcom CPS1 · ghouls · 384×224 · 4.10 ms/trame · 59.2 fps · x3 (960x672) · son 24038 Hz stéréo · MARCHE"
         );
     }
 
@@ -73,7 +86,7 @@ mod tests {
             paused: true,
             ..StatusInfo::default()
         };
-        assert_eq!(format_status(&s), "– · – · – · – · – · – · ARRÊT");
+        assert_eq!(format_status(&s), "– · – · – · – · – · – · – · ARRÊT");
     }
 
     #[test]
@@ -82,7 +95,7 @@ mod tests {
             paused: true,
             ..StatusInfo::default()
         };
-        assert_eq!(format_status(&s), "– · – · – · – · – · – · PAUSE");
+        assert_eq!(format_status(&s), "– · – · – · – · – · – · – · PAUSE");
     }
 
     #[test]

@@ -36,6 +36,8 @@ impl App {
             MenuAction::Fullscreen(f) => d.fullscreen = f,
             MenuAction::ToggleFullscreen => d.fullscreen = !d.fullscreen,
             MenuAction::Smooth(s) => d.smooth = s,
+            MenuAction::Bezels(b) => d.bezels = b,
+            MenuAction::ToggleBezels => d.bezels = !d.bezels,
             MenuAction::Overlay(o) => self.prefs.overlay.enabled = o,
             MenuAction::OverlayFull(f) => self.prefs.overlay.full = f,
             MenuAction::OverlayCorner(c) => self.prefs.overlay.corner = c,

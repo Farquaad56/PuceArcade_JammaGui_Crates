@@ -28,7 +28,7 @@ pub enum Aspect {
     Tv,
 }
 
-#[derive(Clone, Debug, PartialEq, Default)]
+#[derive(Clone, Debug, PartialEq)]
 pub struct DisplayPrefs {
     pub scale: ScaleMode,
     pub fullscreen: bool,
@@ -37,6 +37,21 @@ pub struct DisplayPrefs {
     pub smooth: bool,
     /// Rotation forcée de l'image (`None` = celle annoncée par la carte).
     pub rotation_override: Option<Rotation>,
+    /// Bezels RetroArch en plein écran (activés par défaut, s'il en existe pour le jeu).
+    pub bezels: bool,
+}
+
+impl Default for DisplayPrefs {
+    fn default() -> Self {
+        DisplayPrefs {
+            scale: ScaleMode::default(),
+            fullscreen: false,
+            aspect: Aspect::default(),
+            smooth: false,
+            rotation_override: None,
+            bezels: true,
+        }
+    }
 }
 
 /// Assignations action -> nom de touche / de bouton ; vide = valeurs par défaut.
@@ -189,7 +204,7 @@ impl Prefs {
     pub fn to_toml(&self) -> String {
         let d = &self.display;
         let mut s = format!(
-            "[display]\nscale = \"{}\"\nfullscreen = {}\naspect = \"{}\"\nsmooth = {}\nrotation = \"{}\"\n",
+            "[display]\nscale = \"{}\"\nfullscreen = {}\naspect = \"{}\"\nsmooth = {}\nrotation = \"{}\"\nbezels = {}\n",
             scale_to_str(d.scale),
             d.fullscreen,
             match d.aspect {
@@ -198,6 +213,7 @@ impl Prefs {
             },
             d.smooth,
             rotation_str(d.rotation_override)
+            , d.bezels
         );
         if let Some(n) = self.input.mouse_sens {
             s.push_str(&format!("\n[input]\nmouse_sensitivity = {n}\n"));
@@ -291,6 +307,11 @@ impl Prefs {
                     }
                 }
                 ("display", "rotation") => p.display.rotation_override = parse_rotation(v),
+                ("display", "bezels") => {
+                    if let Some(b) = parse_bool(v) {
+                        p.display.bezels = b;
+                    }
+                }
                 ("input", "mouse_sensitivity") => {
                     if let Ok(n) = v.parse::<u32>() {
                         p.input.mouse_sens = Some(n.clamp(10, 500));
@@ -458,6 +479,7 @@ mod tests {
                 aspect: Aspect::Tv,
                 smooth: true,
                 rotation_override: Some(Rotation::Rot270),
+                bezels: false,
             },
             input: InputPrefs {
                 keys: vec![

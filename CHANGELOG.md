@@ -1,5 +1,16 @@
 # Changelog
 
+## v0.3.0
+
+- Bezels RetroArch en plein écran (`puce_jamma_gui::bezel`) : `<jeu>.cfg` puis parent puis `_generic.cfg`
+  dans `AppOptions::bezels_dir`, PNG chargé dans un fil, écran détecté par l'alpha (< 128 autour du centre,
+  vitre semi-transparente dessinée par-dessus le jeu), image du jeu ajustée à l'écran du bezel.
+- Menu Affichage : case « Bezels en plein écran », raccourci Ctrl+B, préférence `[display] bezels` (activée par
+  défaut).
+- API : `AppOptions` gagne `bezels_dir: Option<PathBuf>` ; `StatusInfo` gagne `audio` (fréquence et canaux).
+- Barre d'état : fréquence et mode du son (« son 24038 Hz stéréo », « son 55930 Hz mono »).
+- Exemple `bezel_info` : taille du bezel et écran détecté.
+
 ## v0.2.0
 
 - `puce-jamma-gui`, fenêtre « Filtres vidéo », nouvelle section **Tube CRT** (réglages indépendants des préréglages

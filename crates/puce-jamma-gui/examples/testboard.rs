@@ -10,6 +10,7 @@ fn main() {
         AppOptions {
             window_title: "Mire JAMMA".into(),
             config_dir: ".".into(),
+            bezels_dir: None,
         },
     );
     if let Err(e) = res {

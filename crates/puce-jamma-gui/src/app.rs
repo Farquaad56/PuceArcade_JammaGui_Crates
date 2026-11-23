@@ -13,6 +13,7 @@ use puce_jamma::util::rotate;
 use puce_jamma::video::VideoInfo;
 
 use crate::audio::{self, AudioOut};
+use crate::bezel;
 use crate::bindings::Bindings;
 use crate::controls_menu::ControlsWindow;
 use crate::debugger::Debugger;
@@ -108,6 +109,9 @@ pub struct App {
     pub(crate) layout: Option<DisplayRect>,
     /// Zone centrale (image) de la dernière trame affichée : l'overlay s'y place.
     pub(crate) central_rect: Option<egui::Rect>,
+    /// Bezels RetroArch (plein écran).
+    bezels_dir: Option<std::path::PathBuf>,
+    bezel: BezelState,
     /// Dernier état « débogueur ouvert » transmis au thread d'émulation.
     debug_live_sent: bool,
     sound: Option<Sound>,
@@ -161,6 +165,8 @@ impl App {
             fx_tex: None,
             layout: None,
             central_rect: None,
+            bezels_dir: None,
+            bezel: BezelState::default(),
             debug_live_sent: false,
             sound: sound.map(|out| Sound {
                 resampler: AudioResampler::new(48_000.0, out.rate),
@@ -359,22 +365,102 @@ impl App {
     }
 
     /// Dessine la trame dans la zone centrale.
+    /// Dossier des bezels RetroArch (None : pas de bezels).
+    pub fn with_bezels(mut self, dir: Option<std::path::PathBuf>) -> Self {
+        self.bezels_dir = dir;
+        self
+    }
+
+    /// Bezel du jeu courant si le plein écran et l'option sont actifs : chargé en arrière-plan
+    /// (PNG 4K), puis gardé en texture. Retourne sa texture et sa géométrie quand il est prêt.
+    fn current_bezel(&mut self, ctx: &egui::Context) -> Option<(egui::TextureId, bezel::Geometry)> {
+        let d = &self.prefs.display;
+        let (Some(dir), Some(b)) = (self.bezels_dir.clone(), self.board.as_ref()) else {
+            return None;
+        };
+        if !(d.fullscreen && d.bezels) {
+            return None;
+        }
+        let name = b.name.clone();
+        if self.bezel.game.as_deref() != Some(name.as_str()) {
+            let parent = self
+                .driver
+                .games()
+                .into_iter()
+                .find(|g| g.name == name)
+                .map(|g| g.parent)
+                .unwrap_or_default();
+            self.bezel = BezelState {
+                game: Some(name.clone()),
+                ..BezelState::default()
+            };
+            if let Some(cfg) = bezel::find_cfg(&dir, &name, &parent) {
+                let (tx, rx) = crossbeam_channel::bounded(1);
+                let c = ctx.clone();
+                std::thread::spawn(move || {
+                    let _ = tx.send(bezel::load(&cfg));
+                    c.request_repaint();
+                });
+                self.bezel.rx = Some(rx);
+            }
+        }
+        if let Some(rx) = &self.bezel.rx {
+            if let Ok(r) = rx.try_recv() {
+                self.bezel.rx = None;
+                match r {
+                    Ok(bz) => {
+                        let img = egui::ColorImage::from_rgba_unmultiplied([bz.w, bz.h], &bz.rgba);
+                        let tex = ctx.load_texture("bezel", img, egui::TextureOptions::LINEAR);
+                        self.bezel.ready = Some((tex, bz.geometry()));
+                    }
+                    Err(e) => self.error = Some(format!("Bezel : {e}")),
+                }
+            }
+        }
+        self.bezel.ready.as_ref().map(|(t, g)| (t.id(), *g))
+    }
+
     fn draw_frame(&mut self, ui: &mut egui::Ui) {
         let avail = ui.max_rect();
         self.central_rect = Some(avail);
-        let (Some(t), Some(b)) = (self.texture.as_ref().map(|t| t.id()), self.board.as_ref())
-        else {
+        if self.board.is_none() || self.texture.is_none() {
             self.layout = None;
             ui.centered_and_justified(|ui| ui.label("Fichier > Ouvrir un jeu…"));
+            return;
+        }
+        let bezel = self.current_bezel(ui.ctx());
+        let (Some(t), Some(b)) = (self.texture.as_ref().map(|t| t.id()), self.board.as_ref())
+        else {
             return;
         };
         let d = &self.prefs.display;
         let info = effective_info(&b.video, d.rotation_override);
-        let l = display::layout(avail, ui.pixels_per_point(), d.scale, d.aspect, &info);
-        let tex = self.filtered_texture(ui.ctx(), &l).unwrap_or(t);
+        let ppp = ui.pixels_per_point();
         let uv = egui::Rect::from_min_max(egui::pos2(0.0, 0.0), egui::pos2(1.0, 1.0));
-        ui.painter_at(avail)
-            .image(tex, l.rect, uv, egui::Color32::WHITE);
+        let l = match bezel {
+            // plein écran avec bezel : l'image remplit le trou, aux proportions de l'écran du jeu
+            Some((_, g)) => {
+                let (_, hole) = bezel::layout(avail, &g);
+                let rect = bezel::fit(hole, info.aspect);
+                let px = (
+                    (rect.width() * ppp).round() as u32,
+                    (rect.height() * ppp).round() as u32,
+                );
+                DisplayRect {
+                    rect,
+                    factor: (px.1 / info.height.max(1)).max(1),
+                    px,
+                }
+            }
+            None => display::layout(avail, ppp, d.scale, d.aspect, &info),
+        };
+        let tex = self.filtered_texture(ui.ctx(), &l).unwrap_or(t);
+        let painter = ui.painter_at(avail);
+        painter.image(tex, l.rect, uv, egui::Color32::WHITE);
+        if let Some((bt, g)) = bezel {
+            let (r, _) = bezel::layout(avail, &g);
+            painter.image(bt, r, uv, egui::Color32::WHITE);
+        }
         self.layout = Some(l);
     }
 
@@ -534,4 +620,13 @@ mod tests {
         assert_eq!(img.size, [4, 2]);
         assert_eq!(img.pixels[0], egui::Color32::from_rgb(255, 128, 64));
     }
+}
+
+/// Bezel du jeu courant : chargement en cours (`rx`) ou texture prête.
+#[derive(Default)]
+struct BezelState {
+    /// Jeu pour lequel le bezel a été demandé.
+    game: Option<String>,
+    rx: Option<Receiver<Result<bezel::Bezel, String>>>,
+    ready: Option<(egui::TextureHandle, bezel::Geometry)>,
 }

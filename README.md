@@ -46,4 +46,14 @@ Service : 9 ; Test : F2 ; Tilt : aucune touche. Joueurs 3 et 4 : manettes 3 et 4
 | F8 | emplacement suivant (0 à 9) |
 | F11, Échap | plein écran / quitter le plein écran |
 | F12 | capture PNG (image native tournée) dans le dossier des sauvegardes |
+| Ctrl+B | bezels en plein écran (activer / désactiver) |
+
+## Bezels (plein écran)
+
+Le frontal affiche en plein écran les bezels au format RetroArch : un fichier `<jeu>.cfg` (ligne
+`overlay0_overlay = image.png`) et son image PNG, dans le dossier `bezels_dir` passé à `AppOptions`.
+Recherche : le jeu, puis son parent, puis `_generic.cfg`. L'écran du bezel est la zone où l'alpha est
+inférieur à 128 autour du centre ; l'image du jeu le remplit si ses proportions sont à moins de 5 %, sinon
+elle y est centrée. La vitre semi-transparente du bezel (reflets) est dessinée par-dessus le jeu.
+Case « Bezels en plein écran » dans le menu Affichage, ou Ctrl+B ; le choix est gardé dans `prefs.toml`.
 
