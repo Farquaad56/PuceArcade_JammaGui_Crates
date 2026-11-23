@@ -48,6 +48,16 @@ Service : 9 ; Test : F2 ; Tilt : aucune touche. Joueurs 3 et 4 : manettes 3 et 4
 | F12 | capture PNG (image native tournée) dans le dossier des sauvegardes |
 | Ctrl+B | bezels en plein écran (activer / désactiver) |
 
+## Filtres vidéo
+
+Menu Affichage > Filtres vidéo. Préréglages : Moniteur d'arcade 15 kHz, Sony Trinitron, Tube fané. Onglets :
+- **Image** : agrandissement pixel art, interpolation horizontale, overscan ;
+- **Lignes et masque** : scanlines (standard, adaptatives, faisceau gaussien), masque (fentes, points, Trinitron,
+  tube fané) ;
+- **Couleur** : gamma, niveau du noir, température du blanc (9 300 K = moniteur japonais), canaux RVB ;
+- **Tube** : courbure, vignettage, coins arrondis (sans effet quand un bezel est affiché), halo, convergence ;
+- **Effets** : barre de balayage, instabilité, taches de pureté, images noires (écran 120 Hz ou plus).
+
 ## Bezels (plein écran)
 
 Le frontal affiche en plein écran les bezels au format RetroArch : un fichier `<jeu>.cfg` (ligne

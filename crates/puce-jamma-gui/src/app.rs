@@ -112,6 +112,11 @@ pub struct App {
     /// Bezels RetroArch (plein écran).
     bezels_dir: Option<std::path::PathBuf>,
     bezel: BezelState,
+    /// Un bezel a été dessiné à la dernière trame (géométrie du tube désactivée).
+    pub(crate) bezel_shown: bool,
+    /// Fréquence mesurée de l'écran (Hz, lissée) et phase de l'insertion d'images noires.
+    pub(crate) refresh_hz: f32,
+    bfi_black: bool,
     /// Dernier état « débogueur ouvert » transmis au thread d'émulation.
     debug_live_sent: bool,
     sound: Option<Sound>,
@@ -167,6 +172,9 @@ impl App {
             central_rect: None,
             bezels_dir: None,
             bezel: BezelState::default(),
+            bezel_shown: false,
+            refresh_hz: 60.0,
+            bfi_black: false,
             debug_live_sent: false,
             sound: sound.map(|out| Sound {
                 resampler: AudioResampler::new(48_000.0, out.rate),
@@ -327,8 +335,8 @@ impl App {
         &mut self,
         ctx: &egui::Context,
         l: &DisplayRect,
+        fx: Fx,
     ) -> Option<egui::TextureId> {
-        let fx = self.prefs.fx;
         let s = self.shown.as_ref()?;
         if !fx.is_active() {
             self.perf.fx_ms = None;
@@ -458,14 +466,40 @@ impl App {
             }
             None => display::layout(avail, ppp, d.scale, d.aspect, &info),
         };
-        let tex = self.filtered_texture(ui.ctx(), &l).unwrap_or(t);
+        // un bezel dessine déjà le tube : pas de courbure, de vignettage ni de coins
+        self.bezel_shown = bezel.is_some();
+        let fx = if self.bezel_shown {
+            self.prefs.fx.without_geometry()
+        } else {
+            self.prefs.fx
+        };
+        let tex = self.filtered_texture(ui.ctx(), &l, fx).unwrap_or(t);
         let painter = ui.painter_at(avail);
-        painter.image(tex, l.rect, uv, egui::Color32::WHITE);
+        // images noires : une trame d'écran sur deux, si l'écran est au moins deux fois plus rapide
+        let bfi = fx.bfi && self.fx_env().bfi_possible();
+        self.bfi_black = bfi && !self.bfi_black;
+        if self.bfi_black {
+            painter.rect_filled(l.rect, 0.0, egui::Color32::BLACK);
+        } else {
+            painter.image(tex, l.rect, uv, egui::Color32::WHITE);
+        }
         if let Some((bt, g)) = bezel {
             let (r, _) = bezel::layout(avail, &g);
             painter.image(bt, r, uv, egui::Color32::WHITE);
         }
         self.layout = Some(l);
+    }
+
+    /// Contexte des réglages de filtres : bezel affiché, fréquences de l'écran et du jeu.
+    pub(crate) fn fx_env(&self) -> crate::fx_menu::FxEnv {
+        crate::fx_menu::FxEnv {
+            bezel: self.bezel_shown,
+            refresh_hz: self.refresh_hz,
+            game_hz: self
+                .board
+                .as_ref()
+                .map_or(0.0, |b| b.video.refresh_hz as f32),
+        }
     }
 
     pub(crate) fn scale_info(&self) -> String {
@@ -551,6 +585,10 @@ impl eframe::App for App {
         self.apply_fullscreen(&ctx);
         self.send_inputs(&ctx);
         self.perf.smooth_ui(ctx.input(|i| i.unstable_dt) * 1000.0);
+        let dt = ctx.input(|i| i.stable_dt);
+        if dt > 0.0 {
+            self.refresh_hz += (1.0 / dt - self.refresh_hz) * 0.05;
+        }
         self.windows(&ctx);
         self.panels(ui, &ctx);
         egui::CentralPanel::default()

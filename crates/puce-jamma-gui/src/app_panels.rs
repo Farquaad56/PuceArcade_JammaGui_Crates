@@ -50,7 +50,8 @@ impl App {
                 .show(ctx, &info, &mut self.bindings, &mut self.pads);
         }
         let mut fx = self.prefs.fx;
-        if self.fx_win.show(ctx, &mut fx) {
+        let env = self.fx_env();
+        if self.fx_win.show(ctx, &mut fx, &env) {
             self.prefs.fx = fx;
         }
     }

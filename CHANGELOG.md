@@ -1,9 +1,32 @@
 # Changelog
 
-## Non publié
+## v0.4.0
 
-- Bezels : option « Reflets de la vitre » (menu Affichage, préférence `[display] bezel_glass`, activée par défaut) ;
-  désactivée, l'écran du bezel devient entièrement transparent (`Bezel::pixels(glass)`).
+- Fenêtre « Filtres vidéo » réorganisée : préréglage et « Tout désactiver » en tête, puis cinq onglets
+  (Image, Lignes et masque, Couleur, Tube, Effets) ; un point marque les onglets actifs, chaque onglet se
+  réinitialise seul.
+- Nouveaux effets CRT (`crt.rs`, `crt_light.rs`) :
+  - scanlines « Faisceau gaussien » : épaisseur de la ligne selon la valeur de chaque canal (ligne sombre /
+    claire réglables) ;
+  - masques calculés « Fentes » (slot mask des moniteurs d'arcade) et « Points » (shadow mask), taille des
+    luminophores réglable (auto ou 1 à 4 px) ;
+  - température du blanc (5 000 à 9 300 K), niveau du noir ;
+  - halo (lumière diffusée dans le verre), intensité et taille ;
+  - overscan (0 à 10 %) ;
+  - courbure, vignettage, coins arrondis (désactivés automatiquement quand un bezel est affiché) ;
+  - instabilité de l'image, taches de pureté ;
+  - images noires intercalées (netteté du mouvement), actives seulement si l'écran va au moins à 1,8 fois la
+    fréquence du jeu.
+- Préréglage « Moniteur d'arcade 15 kHz ». Les préréglages ne touchent plus à l'overscan, à la géométrie, aux
+  défauts ni aux images noires.
+- Ordre du rendu : faisceau, géométrie, tube, halo, puis couleur, masque et vignettage en une passe (le masque
+  est fixe sur la face du tube et n'est plus déformé).
+- Bezels : option « Reflets de la vitre » (menu Affichage, préférence `[display] bezel_glass`, activée par
+  défaut) ; désactivée, l'écran du bezel devient entièrement transparent (`Bezel::pixels(glass)`).
+- API : `FxWindow::show` prend un `FxEnv` (bezel affiché, fréquences de l'écran et du jeu) ; `Fx` gagne
+  `beam_dk`, `beam_br`, `mask_pitch`, `temp`, `black`, `bloom`, `bloom_size`, `overscan`, `curve`,
+  `vignette`, `corner`, `jitter`, `purity`, `bfi` ; `ScanMode::Gaussian`, `Mask::Slot`, `Mask::Shadow`.
+- Exemples `crt_demo` (aperçu du préréglage arcade) et `fx_bench` (coût par trame).
 
 ## v0.3.0
 

@@ -192,6 +192,7 @@ fn scan_mode_str(m: ScanMode) -> &'static str {
         ScanMode::Off => "off",
         ScanMode::Standard => "standard",
         ScanMode::Adaptive => "adaptive",
+        ScanMode::Gaussian => "gaussian",
     }
 }
 
@@ -200,6 +201,8 @@ fn mask_str(m: Mask) -> &'static str {
         Mask::None => "none",
         Mask::Trinitron => "trinitron",
         Mask::FadedYellow => "faded",
+        Mask::Slot => "slot",
+        Mask::Shadow => "shadow",
     }
 }
 
@@ -260,6 +263,7 @@ impl Prefs {
             "red = {}\ngreen = {}\nblue = {}\nconv_rx = {}\nconv_ry = {}\nconv_bx = {}\nconv_by = {}\nsweep = {}\nsweep_speed = {}\nsweep_width = {}\n",
             f.red, f.green, f.blue, f.conv_rx, f.conv_ry, f.conv_bx, f.conv_by, f.sweep, f.sweep_speed, f.sweep_width
         ));
+        s.push_str(&crate::fx_prefs::write(f));
         let g = &self.debug;
         s.push_str(&format!(
             "\n[debug]\nopen = {}\ntab = \"{}\"\nregion = \"{}\"\nshow_status_bar = {}\n",
@@ -375,6 +379,7 @@ impl Prefs {
                     "off" => p.fx.scan_mode = ScanMode::Off,
                     "standard" => p.fx.scan_mode = ScanMode::Standard,
                     "adaptive" => p.fx.scan_mode = ScanMode::Adaptive,
+                    "gaussian" => p.fx.scan_mode = ScanMode::Gaussian,
                     _ => {}
                 },
                 ("fx", "scan") => {
@@ -401,6 +406,8 @@ impl Prefs {
                     "none" => p.fx.mask = Mask::None,
                     "trinitron" => p.fx.mask = Mask::Trinitron,
                     "faded" => p.fx.mask = Mask::FadedYellow,
+                    "slot" => p.fx.mask = Mask::Slot,
+                    "shadow" => p.fx.mask = Mask::Shadow,
                     _ => {}
                 },
                 ("fx", "mask_pct") => {
@@ -444,6 +451,7 @@ impl Prefs {
                         p.fx.sweep_width = n.clamp(2, 50);
                     }
                 }
+                ("fx", k) if crate::fx_prefs::read(&mut p.fx, k, v) => {}
                 ("debug", "open") => {
                     if let Some(b) = parse_bool(v) {
                         p.debug.open = b;
@@ -506,6 +514,11 @@ mod tests {
             },
             fx: Fx {
                 scaler: Scaler::SuperEagle,
+                scan_mode: ScanMode::Gaussian,
+                mask: Mask::Slot,
+                temp: 93,
+                curve: 30,
+                bfi: true,
                 red: 110,
                 blue: 90,
                 conv_rx: 2,

@@ -10,6 +10,7 @@ use std::sync::OnceLock;
 use eframe::egui::Color32;
 
 use crate::pixel2x::{self, Scaler};
+use crate::{crt, crt_light};
 
 /// Scanlines.
 #[derive(Clone, Copy, PartialEq, Eq, Debug, Default)]
@@ -20,6 +21,8 @@ pub enum ScanMode {
     Standard,
     /// Profondeur variable selon la luminosité du pixel.
     Adaptive,
+    /// Faisceau gaussien : la ligne s'épaissit avec la luminosité de chaque canal.
+    Gaussian,
 }
 
 /// Masque d'écran.
@@ -31,6 +34,17 @@ pub enum Mask {
     Trinitron,
     /// Tube fané : teinte jaunâtre.
     FadedYellow,
+    /// Masque à fentes (slot mask) des moniteurs d'arcade : colonnes RVB coupées en quinconce.
+    Slot,
+    /// Masque à points (shadow mask) : triades décalées d'une ligne à l'autre.
+    Shadow,
+}
+
+impl Mask {
+    /// Masque calculé (taille réglable par `Fx::mask_pitch`) plutôt que lu dans un fichier.
+    pub fn procedural(self) -> bool {
+        matches!(self, Mask::Slot | Mask::Shadow)
+    }
 }
 
 /// Réglages des filtres (tous les pourcentages sont des entiers).
@@ -69,6 +83,32 @@ pub struct Fx {
     pub sweep_speed: u8,
     /// Hauteur de la barre en % de l'image (2 à 50).
     pub sweep_width: u8,
+    /// Faisceau gaussien : largeur à mi-hauteur de la ligne pour un canal noir et pour un canal
+    /// au maximum, en % de la hauteur d'une ligne (20 à 150, `beam_dk` ≤ `beam_br`).
+    pub beam_dk: u8,
+    pub beam_br: u8,
+    /// Largeur d'une colonne de phosphore des masques calculés, en pixels écran (0 = auto, 1 à 4).
+    pub mask_pitch: u8,
+    /// Température du blanc en centaines de kelvins (50 à 93 ; 65 = neutre, 93 = moniteur japonais).
+    pub temp: u8,
+    /// Niveau du noir en % (0 à 20) : un tube éteint reste gris très sombre.
+    pub black: u8,
+    /// Halo : lumière diffusée dans le verre, intensité en % (0 = désactivé) et taille (1 à 10,
+    /// en lignes de l'image d'origine).
+    pub bloom: u8,
+    pub bloom_size: u8,
+    /// Overscan : part de l'image coupée sur les bords, en % (0 à 10).
+    pub overscan: u8,
+    /// Géométrie du tube : courbure, vignettage et arrondi des coins, en % (0 = désactivé).
+    pub curve: u8,
+    pub vignette: u8,
+    pub corner: u8,
+    /// Instabilité horizontale de l'image, en % (0 = désactivée).
+    pub jitter: u8,
+    /// Taches de pureté (tube aimanté) dans les coins, en % (0 = désactivées).
+    pub purity: u8,
+    /// Insertion d'images noires entre les images du jeu (écran 120 Hz ou plus).
+    pub bfi: bool,
 }
 
 impl Default for Fx {
@@ -93,9 +133,26 @@ impl Default for Fx {
             sweep: 0,
             sweep_speed: 40,
             sweep_width: 12,
+            beam_dk: 50,
+            beam_br: 100,
+            mask_pitch: 0,
+            temp: NEUTRAL_TEMP,
+            black: 0,
+            bloom: 0,
+            bloom_size: 4,
+            overscan: 0,
+            curve: 0,
+            vignette: 0,
+            corner: 0,
+            jitter: 0,
+            purity: 0,
+            bfi: false,
         }
     }
 }
+
+/// Température neutre (6 500 K, blanc D65 des images d'origine).
+pub const NEUTRAL_TEMP: u8 = 65;
 
 /// Préréglages d'écran.
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
@@ -103,16 +160,23 @@ pub enum Preset {
     None,
     SonyTrinitron,
     FadedTube,
+    Arcade,
 }
 
 impl Preset {
-    pub const ALL: [Preset; 3] = [Preset::None, Preset::SonyTrinitron, Preset::FadedTube];
+    pub const ALL: [Preset; 4] = [
+        Preset::None,
+        Preset::Arcade,
+        Preset::SonyTrinitron,
+        Preset::FadedTube,
+    ];
 
     pub fn label(self) -> &'static str {
         match self {
             Preset::None => "Aucun",
             Preset::SonyTrinitron => "Sony Trinitron",
             Preset::FadedTube => "Tube fané (Faded Tube)",
+            Preset::Arcade => "Moniteur d'arcade 15 kHz",
         }
     }
 }
@@ -145,6 +209,19 @@ impl Fx {
                 mask: Mask::FadedYellow,
                 ..base
             },
+            Preset::Arcade => Fx {
+                interp: 35,
+                scan_mode: ScanMode::Gaussian,
+                beam_dk: 45,
+                beam_br: 100,
+                gamma: 110,
+                mask: Mask::Slot,
+                mask_pct: 70,
+                temp: 93,
+                black: 2,
+                bloom: 25,
+                ..base
+            },
         }
     }
 
@@ -169,8 +246,18 @@ impl Fx {
             f.scan_dk = d.scan_dk;
             f.scan_br = d.scan_br;
         }
+        if f.scan_mode != ScanMode::Gaussian {
+            f.beam_dk = d.beam_dk;
+            f.beam_br = d.beam_br;
+        }
         if f.mask == Mask::None {
             f.mask_pct = d.mask_pct;
+        }
+        if !f.mask.procedural() {
+            f.mask_pitch = d.mask_pitch;
+        }
+        if f.bloom == 0 {
+            f.bloom_size = d.bloom_size;
         }
         f
     }
@@ -182,7 +269,29 @@ impl Fx {
             || self.scan_mode != ScanMode::Off
             || self.gamma != 100
             || self.mask != Mask::None
+            || self.temp != NEUTRAL_TEMP
+            || self.black > 0
+            || self.bloom > 0
+            || self.overscan > 0
+            || self.geometry_active()
+            || self.jitter > 0
+            || self.purity > 0
             || self.tube_active()
+    }
+
+    /// Courbure, vignettage ou coins arrondis actifs ?
+    pub fn geometry_active(&self) -> bool {
+        self.curve > 0 || self.vignette > 0 || self.corner > 0
+    }
+
+    /// Mêmes réglages sans courbure, vignettage ni coins (un bezel dessine déjà le tube).
+    pub fn without_geometry(&self) -> Fx {
+        Fx {
+            curve: 0,
+            vignette: 0,
+            corner: 0,
+            ..*self
+        }
     }
 
     /// Un réglage de tube (canaux, convergence, balayage) agit-il ?
@@ -192,25 +301,17 @@ impl Fx {
             || self.sweep > 0
     }
 
-    /// Mêmes réglages, tube remis à neutre (les préréglages d'écran ne touchent pas au tube).
+    /// Mêmes réglages, réglages personnels remis à neutre (les préréglages d'écran ne touchent ni
+    /// au tube, ni à la géométrie, ni aux défauts, ni à l'agrandissement).
     pub fn without_tube(&self) -> Fx {
-        let d = Fx::default();
-        Fx {
-            red: d.red,
-            green: d.green,
-            blue: d.blue,
-            conv_rx: 0,
-            conv_ry: 0,
-            conv_bx: 0,
-            conv_by: 0,
-            sweep: 0,
-            sweep_speed: d.sweep_speed,
-            sweep_width: d.sweep_width,
-            ..*self
-        }
+        self.with_tube_of(&Fx {
+            scaler: self.scaler,
+            ..Fx::default()
+        })
     }
 
-    /// Copie les réglages de tube de `other` (choix d'un préréglage d'écran).
+    /// Copie les réglages personnels de `other` : canaux, convergence, balayage, overscan,
+    /// géométrie, instabilité, pureté, images noires (choix d'un préréglage d'écran).
     pub fn with_tube_of(&self, other: &Fx) -> Fx {
         Fx {
             red: other.red,
@@ -223,6 +324,13 @@ impl Fx {
             sweep: other.sweep,
             sweep_speed: other.sweep_speed,
             sweep_width: other.sweep_width,
+            overscan: other.overscan,
+            curve: other.curve,
+            vignette: other.vignette,
+            corner: other.corner,
+            jitter: other.jitter,
+            purity: other.purity,
+            bfi: other.bfi,
             ..*self
         }
     }
@@ -324,6 +432,7 @@ fn mask_patterns(m: Mask) -> Option<&'static [Pattern]> {
         Mask::None => None,
         Mask::Trinitron => Some(&t[0]),
         Mask::FadedYellow => Some(&t[1]),
+        Mask::Slot | Mask::Shadow => None,
     }
 }
 
@@ -344,10 +453,11 @@ struct Ctx<'a> {
     pw: usize,
     ph: usize,
     cells: Vec<[u32; 3]>,
-    xmod: Vec<u16>,
     std_t: &'static [i16],
     dark_t: &'static [i16],
     bright_t: &'static [i16],
+    /// Poids du faisceau gaussien (`crt::beam_table`).
+    beam: Vec<f32>,
 }
 
 /// Calcule les rangées de sortie `y0..y0 + out.len() / w`.
@@ -407,9 +517,9 @@ fn render_rows(c: &Ctx, y0: usize, out: &mut [Color32]) {
                     }
                 }
             }
+            ScanMode::Gaussian => beam_row(c, y, &mut vrow),
         }
-        // 2. horizontal (interpolation ou répétition), gamma, masque
-        let mrow = (y % c.ph) * c.pw;
+        // 2. horizontal (interpolation ou répétition), gamma (le masque est posé à la fin)
         for (x, o) in orow.iter_mut().enumerate() {
             let (idx, wg) = &c.cols[x];
             let mut v = [0i32; 3];
@@ -425,10 +535,37 @@ fn render_rows(c: &Ctx, y0: usize, out: &mut [Color32]) {
                 let p = vrow[usize::from(idx[0])];
                 v = [i32::from(p[0]), i32::from(p[1]), i32::from(p[2])];
             }
-            let g = &c.cells[mrow + usize::from(c.xmod[x])];
-            let f = |ch: usize| ((c.lut[v[ch] as usize] * g[ch] + 128) >> 8).min(255) as u8;
+            let f = |ch: usize| c.lut[v[ch] as usize].min(255) as u8;
             *o = Color32::from_rgb(f(0), f(1), f(2));
         }
+    }
+}
+
+/// Faisceau gaussien : rangée `y` de sortie à la largeur de la source. Chaque canal de chacune
+/// des 4 lignes d'origine les plus proches contribue selon sa distance et sa propre valeur.
+fn beam_row(c: &Ctx, y: usize, vrow: &mut [[u8; 3]]) {
+    let p = (y as f32 + 0.5) * c.sh as f32 / c.h as f32;
+    let r0 = (p - 0.5).floor() as i32;
+    let rows: Vec<(&[[u8; 3]], f32)> = (-1..=2)
+        .map(|j| r0 + j)
+        .filter(|r| *r >= 0 && (*r as usize) < c.sh)
+        .map(|r| {
+            let ru = r as usize;
+            (
+                &c.src[ru * c.sw..(ru + 1) * c.sw],
+                (p - (r as f32 + 0.5)).abs(),
+            )
+        })
+        .collect();
+    for (x, o) in vrow.iter_mut().enumerate() {
+        let mut a = [0f32; 3];
+        for (row, d) in &rows {
+            for ch in 0..3 {
+                let v = row[x][ch];
+                a[ch] += crt::beam_weight(&c.beam, v, *d) * f32::from(v);
+            }
+        }
+        *o = a.map(|v| (v + 0.5).min(255.0) as u8);
     }
 }
 
@@ -444,6 +581,11 @@ pub fn render(
     frame: u64,
 ) -> Vec<Color32> {
     assert!(src.len() >= src_w * src_h && w > 0 && h > 0);
+    let cropped = (fx.overscan > 0).then(|| crt::crop(src, src_w, src_h, fx.overscan));
+    let (src, src_w, src_h) = match &cropped {
+        Some((v, cw, ch)) => (&v[..], *cw, *ch),
+        None => (src, src_w, src_h),
+    };
     let big = pixel2x::upscale(src, src_w, src_h, fx.scaler);
     let (sw, sh, pix) = match &big {
         Some(v) => (2 * src_w, 2 * src_h, &v[..]),
@@ -486,22 +628,20 @@ pub fn render(
 
     // masque (motif choisi selon la hauteur, comme le mode « 1x »), gains en 8.8
     let mp = f32::from(fx.mask_pct) / 100.0;
-    let pat =
-        mask_patterns(fx.mask).and_then(|ps| ps.iter().rev().find(|p| p.res <= h).or(ps.first()));
-    let (pw, ph, cells) = match pat {
-        Some(p) => (
-            p.w,
-            p.h,
-            p.cells
-                .iter()
-                .map(|c| {
-                    std::array::from_fn(|ch| ((1.0 - mp * (1.0 - c[ch])) * 256.0 + 0.5) as u32)
-                })
-                .collect(),
-        ),
-        None => (1, 1, vec![[256u32; 3]]),
+    let gains = |c: &[f32; 3]| -> [u32; 3] {
+        std::array::from_fn(|ch| ((1.0 - mp * (1.0 - c[ch])) * 256.0 + 0.5) as u32)
     };
-    let xmod = (0..w).map(|x| (x % pw) as u16).collect();
+    let (pw, ph, cells): (usize, usize, Vec<[u32; 3]>) = if fx.mask.procedural() {
+        let (pw, ph, c) = crt::procedural_mask(fx.mask, crt::pitch(fx.mask_pitch, h));
+        (pw, ph, c.iter().map(gains).collect())
+    } else {
+        let pat = mask_patterns(fx.mask)
+            .and_then(|ps| ps.iter().rev().find(|p| p.res <= h).or(ps.first()));
+        match pat {
+            Some(p) => (p.w, p.h, p.cells.iter().map(gains).collect()),
+            None => (1, 1, vec![[256u32; 3]]),
+        }
+    };
 
     let (dark_t, bright_t) = adaptive_tables(fx.scan_dk, fx.scan_br);
     let ctx = Ctx {
@@ -517,10 +657,14 @@ pub fn render(
         pw,
         ph,
         cells,
-        xmod,
         std_t: std_table(fx.scan),
         dark_t,
         bright_t,
+        beam: if fx.scan_mode == ScanMode::Gaussian {
+            crt::beam_table(fx.beam_dk, fx.beam_br)
+        } else {
+            Vec::new()
+        },
     };
 
     let mut out = vec![Color32::BLACK; w * h];
@@ -542,13 +686,27 @@ pub fn render(
             }
         });
     }
+    post(&mut out, w, h, src_h, fx, frame);
+    let mask = crt_light::MaskGains {
+        pw: ctx.pw,
+        ph: ctx.ph,
+        cells: &ctx.cells,
+    };
+    crt_light::finish(&mut out, w, h, fx, &mask);
+    out
+}
+
+/// Effets d'après le faisceau : géométrie et instabilité, convergence / canaux / balayage, halo
+/// (couleur, masque et vignettage sont posés ensuite en une passe, `crt_light::finish`).
+fn post(out: &mut [Color32], w: usize, h: usize, sh: usize, fx: &Fx, frame: u64) {
+    crt::warp(out, w, h, sh, fx, frame);
     if (fx.red, fx.green, fx.blue) != (100, 100, 100)
         || (fx.conv_rx, fx.conv_ry, fx.conv_bx, fx.conv_by) != (0, 0, 0, 0)
         || fx.sweep > 0
     {
-        tube(&mut out, w, h, fx, frame);
+        tube(out, w, h, fx, frame);
     }
-    out
+    crt_light::bloom(out, w, h, sh, fx);
 }
 
 /// Trames par seconde supposées pour la vitesse de la barre de balayage.
