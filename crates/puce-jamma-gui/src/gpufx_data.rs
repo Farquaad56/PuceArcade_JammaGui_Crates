@@ -24,6 +24,12 @@ pub const FIELDS: &[(&str, Ty)] = &[
     ("mode", Ty::U),
     ("kernel_on", Ty::U),
     ("o_kern", Ty::U),
+    ("o_vpos", Ty::U),
+    ("o_hpos", Ty::U),
+    ("o_wrow", Ty::U),
+    ("o_wcol", Ty::U),
+    ("o_bcol", Ty::U),
+    ("o_brow", Ty::U),
     ("o_std", Ty::U),
     ("o_dark", Ty::U),
     ("o_bright", Ty::U),
@@ -197,8 +203,12 @@ pub fn build_job(
         p.set_u(k, v as u32);
     }
     beam_part(&mut p, &mut t, fx);
+    positions(&mut p, &mut t, fx, (s.w, s.h), (w, h));
     post_part(&mut p, &mut t, fx, (w, h, s.orig_h), frame);
     let bloom = bloom_part(&mut p, fx, (w, h, s.orig_h));
+    if let Some(b) = bloom {
+        bloom_positions(&mut p, &mut t, &b, w, h);
+    }
     finish_part(&mut p, &mut t, fx, w, h);
     let mut tables = t.0;
     tables.resize(tables.len().div_ceil(TABLE_W).max(1) * TABLE_W, 0.0);
@@ -240,6 +250,77 @@ fn beam_part(p: &mut Params, t: &mut Tables, fx: &Fx) {
     p.set_u("o_gamma", t.push(lut.iter().map(|v| (*v).min(255) as f32)));
 }
 
+/// Positions des filtres de faisceau, calculées comme `postfx::render` (en flottants du processeur :
+/// la division des cartes graphiques n'est pas exacte et ferait changer de ligne ou de phase).
+/// Par rangée de sortie, 5 valeurs : scanlines standard / adaptatives = (ligne, phase sur 64,
+/// phase sur 256, ligne la plus proche, 0) ; faisceau gaussien = (ligne r0, puis l'indice de
+/// distance des lignes r0 − 1 à r0 + 2). Par colonne, 2 valeurs : (colonne, phase sur 64) avec
+/// interpolation, sinon (colonne, 0).
+fn positions(
+    p: &mut Params,
+    t: &mut Tables,
+    fx: &Fx,
+    (sw, sh): (usize, usize),
+    (w, h): (usize, usize),
+) {
+    let mut v = Vec::with_capacity(h * 5);
+    for y in 0..h {
+        if fx.scan_mode == ScanMode::Gaussian {
+            let pf = (y as f32 + 0.5) * sh as f32 / h as f32;
+            let r0 = (pf - 0.5).floor() as i32;
+            v.push(r0 as f32);
+            for j in -1..=2 {
+                let d = (pf - ((r0 + j) as f32 + 0.5)).abs();
+                v.push(((d * crt::BEAM_STEPS as f32) as usize).min(2 * crt::BEAM_STEPS) as f32);
+            }
+        } else {
+            let pos = y as f32 * sh as f32 / h as f32;
+            let fl = pos.floor();
+            let frac = pos - fl;
+            v.extend([
+                fl,
+                ((frac * 64.0) as usize).min(63) as f32,
+                ((frac * 256.0) as usize).min(255) as f32,
+                if frac <= 0.5 { 1.0 } else { 2.0 },
+                0.0,
+            ]);
+        }
+    }
+    p.set_u("o_vpos", t.push(v));
+    let mut c = Vec::with_capacity(w * 2);
+    for x in 0..w {
+        if fx.interp > 0 {
+            let pos = (x as f32 + 0.5) * sw as f32 / w as f32 - 0.5;
+            let i = pos.floor();
+            c.extend([i, (((pos - i) * 64.0) as usize).min(63) as f32]);
+        } else {
+            c.extend([(x * sw / w).min(sw - 1) as f32, 0.0]);
+        }
+    }
+    p.set_u("o_hpos", t.push(c));
+}
+
+/// Halo : pour chaque colonne puis chaque rangée de sortie, les deux points de l'image réduite et
+/// le poids du second (sur 256), comme `crt_light::bloom`.
+fn bloom_positions(p: &mut Params, t: &mut Tables, b: &Bloom, w: usize, h: usize) {
+    let s = b.s as f32;
+    let axis = |n: usize, m: u32| -> Vec<f32> {
+        (0..n)
+            .flat_map(|i| {
+                let f = ((i as f32 + 0.5) / s - 0.5).clamp(0.0, (m - 1) as f32);
+                let i0 = f as u32;
+                [
+                    i0 as f32,
+                    (i0 + 1).min(m - 1) as f32,
+                    ((f.fract() * 256.0) as u32) as f32,
+                ]
+            })
+            .collect()
+    };
+    p.set_u("o_bcol", t.push(axis(w, b.bw)));
+    p.set_u("o_brow", t.push(axis(h, b.bh)));
+}
+
 /// Géométrie, instabilité, convergence, gains des canaux, barre de balayage.
 fn post_part(
     p: &mut Params,
@@ -248,7 +329,6 @@ fn post_part(
     (w, h, sh0): (usize, usize, usize),
     frame: u64,
 ) {
-    let _ = w;
     p.set_u("warp_on", u32::from(fx.curve > 0 || fx.jitter > 0));
     let c = f32::from(fx.curve.min(100)) / 100.0;
     p.set_f("k0", c * 3.0 / 32.0);
@@ -256,6 +336,31 @@ fn post_part(
     let jit: Vec<f32> = (0..h)
         .map(|y| crt::jitter_dx(fx, y, h, sh0, frame))
         .collect();
+    // courbure, comme crt::warp : par rangée (a, b, c, d, 1/ku, |v|), par colonne (u, kv)
+    let (wf, hf) = (w as f32, h as f32);
+    let (k0, k1) = (c * 3.0 / 32.0, c * 3.0 / 24.0);
+    let rows: Vec<f32> = (0..h)
+        .flat_map(|y| {
+            let v = (y as f32 + 0.5) / hf * 2.0 - 1.0;
+            let ku = 1.0 + v * v * k0;
+            [
+                ku * 0.5 * wf,
+                0.5 * wf - 0.5 - jit[y],
+                v * 0.5 * hf,
+                0.5 * hf - 0.5,
+                1.0 / ku,
+                v.abs(),
+            ]
+        })
+        .collect();
+    p.set_u("o_wrow", t.push(rows));
+    let cols: Vec<f32> = (0..w)
+        .flat_map(|x| {
+            let u = (x as f32 + 0.5) / wf * 2.0 - 1.0;
+            [u, 1.0 + u * u * k1]
+        })
+        .collect();
+    p.set_u("o_wcol", t.push(cols));
     p.set_u("o_jitter", t.push(jit));
     let conv = (fx.conv_rx, fx.conv_ry, fx.conv_bx, fx.conv_by) != (0, 0, 0, 0);
     p.set_u("tube_on", u32::from(fx.tube_active()));

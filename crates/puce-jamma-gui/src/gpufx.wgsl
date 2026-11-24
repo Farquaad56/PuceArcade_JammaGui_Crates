@@ -52,19 +52,19 @@ fn out8(v: vec3<u32>) -> vec4<f32> {
 
 // ---------- passe 1 : faisceau ----------
 
-// Faisceau gaussien : colonne source cx de la rangée de sortie y.
+// Faisceau gaussien : colonne source cx de la rangée de sortie y. Positions précalculées
+// (o_vpos : ligne r0 puis indice de distance des lignes r0 - 1 à r0 + 2).
 fn vert_gauss(cx: i32, y: u32) -> vec3<i32> {
     let sh = i32(p.sh);
-    let pf = (f32(y) + 0.5) * f32(p.sh) / f32(p.h);
-    let r0 = i32(floor(pf - 0.5));
+    let vp = p.o_vpos + y * 5u;
+    let r0 = tabi(vp);
     var a = vec3<f32>(0.0);
-    for (var j = -1; j <= 2; j++) {
-        let r = r0 + j;
+    for (var j = 0; j < 4; j++) {
+        let r = r0 - 1 + j;
         if r < 0 || r >= sh {
             continue;
         }
-        let d = abs(pf - (f32(r) + 0.5));
-        let di = min(u32(d * 32.0), 64u);
+        let di = tabu(vp + 1u + u32(j));
         let v = px_a(cx, r);
         for (var c = 0; c < 3; c++) {
             let w = tab(p.o_beam + u32(v[c] >> 3u) * 65u + di);
@@ -84,16 +84,15 @@ fn vert(cx: i32, y: u32) -> vec3<i32> {
     if p.mode == 3u {
         return vert_gauss(cx, y);
     }
-    let pos = f32(y) * f32(p.sh) / f32(p.h);
-    let fl = floor(pos);
-    let frac = pos - fl;
-    let i0 = i32(fl);
+    // o_vpos : ligne, phase sur 64, phase sur 256, ligne la plus proche
+    let vp = p.o_vpos + y * 5u;
+    let i0 = tabi(vp);
     var rows: array<vec3<i32>, 4>;
     for (var j = 0; j < 4; j++) {
         rows[j] = px_a(cx, clamp(i0 - 1 + j, 0, sh - 1));
     }
     if p.mode == 1u {
-        let ph = min(u32(frac * 64.0), 63u);
+        let ph = tabu(vp + 1u);
         var a = vec3<i32>(64);
         for (var j = 0u; j < 4u; j++) {
             a += tabi(p.o_std + ph * 4u + j) * rows[j];
@@ -101,11 +100,8 @@ fn vert(cx: i32, y: u32) -> vec3<i32> {
         return clamp(a >> vec3<u32>(7u), vec3<i32>(0), vec3<i32>(255));
     }
     // adaptatives
-    let ph = min(u32(frac * 256.0), 255u);
-    var near = 2;
-    if frac <= 0.5 {
-        near = 1;
-    }
+    let ph = tabu(vp + 2u);
+    let near = tabi(vp + 3u);
     let n = vec3<f32>(rows[near]);
     let l = (0.299 * n.x + 0.587 * n.y + 0.114 * n.z) / 255.0;
     var a = vec3<f32>(0.5);
@@ -124,18 +120,19 @@ fn fs_beam(i: VO) -> @location(0) vec4<f32> {
     let y = u32(i.pos.y);
     let sw = i32(p.sw);
     var v: vec3<i32>;
+    // o_hpos : colonne et phase sur 64
+    let hp = p.o_hpos + x * 2u;
     if p.kernel_on != 0u {
-        let pos = (f32(x) + 0.5) * f32(p.sw) / f32(p.w) - 0.5;
-        let fi = floor(pos);
-        let ph = min(u32((pos - fi) * 64.0), 63u);
+        let fi = tabi(hp);
+        let ph = tabu(hp + 1u);
         var a = vec3<i32>(64);
         for (var j = 0; j < 4; j++) {
-            let idx = clamp(i32(fi) - 1 + j, 0, sw - 1);
+            let idx = clamp(fi - 1 + j, 0, sw - 1);
             a += tabi(p.o_kern + ph * 4u + u32(j)) * vert(idx, y);
         }
         v = clamp(a >> vec3<u32>(7u), vec3<i32>(0), vec3<i32>(255));
     } else {
-        v = vert(i32(min(x * p.sw / p.w, p.sw - 1u)), y);
+        v = vert(tabi(hp), y);
     }
     let g = vec3<u32>(tabu(p.o_gamma + u32(v.x)), tabu(p.o_gamma + u32(v.y)), tabu(p.o_gamma + u32(v.z)));
     return out8(g);
@@ -167,21 +164,15 @@ fn warped(x: i32, y: i32) -> vec3<u32> {
     if p.warp_on == 0u {
         return t1(x, y);
     }
-    let wf = f32(p.w);
-    let hf = f32(p.h);
-    let dx = tab(p.o_jitter + u32(y));
-    let v = (f32(y) + 0.5) / hf * 2.0 - 1.0;
-    let ku = 1.0 + v * v * p.k0;
-    let a = ku * 0.5 * wf;
-    let b = 0.5 * wf - 0.5 - dx;
-    let cc = v * 0.5 * hf;
-    let d = 0.5 * hf - 0.5;
-    let u = (f32(x) + 0.5) / wf * 2.0 - 1.0;
-    let kv = 1.0 + u * u * p.k1;
-    if abs(u) > 1.0 / ku || abs(v) * kv > 1.0 {
+    // o_wrow : a, b, c, d, 1/ku, |v| ; o_wcol : u, kv (comme crt::warp)
+    let wr = p.o_wrow + u32(y) * 6u;
+    let wc = p.o_wcol + u32(x) * 2u;
+    let u = tab(wc);
+    let kv = tab(wc + 1u);
+    if abs(u) > tab(wr + 4u) || tab(wr + 5u) * kv > 1.0 {
         return vec3<u32>(0u);
     }
-    return bilinear(a * u + b, cc * kv + d);
+    return bilinear(tab(wr) * u + tab(wr + 1u), tab(wr + 2u) * kv + tab(wr + 3u));
 }
 
 // Canal décalé (convergence), noir hors de l'image.
@@ -270,15 +261,15 @@ fn glow(x: u32, y: u32) -> vec3<u32> {
 
 // Halo ajouté en mode « écran » au pixel (x, y), comme crt_light::bloom.
 fn add_bloom(x: u32, y: u32, base: vec3<u32>) -> vec3<u32> {
-    let s = f32(p.bs);
-    let bxf = clamp((f32(x) + 0.5) / s - 0.5, 0.0, f32(p.bw - 1u));
-    let byf = clamp((f32(y) + 0.5) / s - 0.5, 0.0, f32(p.bh - 1u));
-    let x0 = u32(bxf);
-    let x1 = min(x0 + 1u, p.bw - 1u);
-    let y0 = u32(byf);
-    let y1 = min(y0 + 1u, p.bh - 1u);
-    let fx = u32(fract(bxf) * 256.0);
-    let fy = u32(fract(byf) * 256.0);
+    // o_bcol / o_brow : deux points de l'image réduite et poids du second
+    let bc = p.o_bcol + x * 3u;
+    let br = p.o_brow + y * 3u;
+    let x0 = tabu(bc);
+    let x1 = tabu(bc + 1u);
+    let fx = tabu(bc + 2u);
+    let y0 = tabu(br);
+    let y1 = tabu(br + 1u);
+    let fy = tabu(br + 2u);
     let la = (glow(x0, y0) * (256u - fy) + glow(x0, y1) * fy) >> vec3<u32>(8u);
     let lb = (glow(x1, y0) * (256u - fy) + glow(x1, y1) * fy) >> vec3<u32>(8u);
     let g = min((la * (256u - fx) + lb * fx) >> vec3<u32>(16u), vec3<u32>(255u));
