@@ -55,6 +55,12 @@ impl JammaBoard for MaCarte {
 - **DIP** : une `DipBank` par octet, une `DipSwitch` par réglage (masque, libellé, valeur par défaut, réglages possibles).
   Le frontal construit le menu, enregistre `<saves_dir>/<jeu>.dips` et appelle `set_dips`.
 - La carte n'est pas `Send` : elle est créée et utilisée dans le thread d'émulation du frontal.
+- **Débogueur** (`BoardDebug`, facultatif) : tout est fourni par la carte, le frontal n'affiche que des données
+  (processeurs, mémoire, groupes de registres, images, couches, voies sonores). Onglet « Son » (ADR 004) :
+  `voices()` renvoie une `AudioVoice` par voie de chaque puce (nom, puce, fréquence, derniers échantillons dans
+  [-1, 1], active, détail) ; `set_voice_scope(true)` arrive quand l'onglet s'ouvre (n'enregistrer les voies
+  qu'à ce moment) ; `set_voice_mute(mask)` coupe des voies du mixage, l'oscilloscope continuant de les montrer.
+  Les trois méthodes ont une version par défaut : une carte sans voies n'a rien à écrire.
 
 ## 3. Le système : `BoardDriver`
 

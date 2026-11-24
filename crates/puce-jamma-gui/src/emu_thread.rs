@@ -6,7 +6,7 @@ use std::path::PathBuf;
 use std::time::Duration;
 
 use puce_jamma::board::{BoardInfo, JammaBoard};
-use puce_jamma::debug::{CpuView, DebugImage};
+use puce_jamma::debug::{AudioVoice, CpuView, DebugImage};
 use puce_jamma::inputs::JammaInputs;
 use puce_jamma::video::VideoInfo;
 
@@ -32,6 +32,11 @@ pub enum Cmd {
     FrameAdvance,
     /// Couches visibles (débogueur), bit n = couche n.
     LayerMask(u32),
+    /// Onglet Son ouvert : enregistrement des voies et `Event::Voices` toutes les `VOICES_EVERY`
+    /// trames en marche (et à la mise en pause, après `FrameAdvance` / `Step`).
+    VoicesLive(bool),
+    /// Voies coupées dans le mixage (bit n = voie n), conservé d'un jeu à l'autre.
+    VoiceMute(u64),
     /// Capture PNG de l'image courante.
     Screenshot,
     /// Lecture de `len` octets (au plus `MAX_PEEK`) à `addr` dans l'espace du CPU `cpu`, sans effet de bord.
@@ -66,6 +71,8 @@ pub enum Event {
     StateError(String),
     ScreenshotSaved(PathBuf),
     Debug(DebugSnapshot),
+    /// Voies sonores pour l'oscilloscope (réponse à `VoicesLive`).
+    Voices(Vec<AudioVoice>),
     /// Réponse à `Peek` (vide si la carte n'a pas de débogueur).
     Memory(Vec<u8>),
 }

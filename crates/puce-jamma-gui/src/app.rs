@@ -123,6 +123,8 @@ pub struct App {
     pub(crate) mire: crate::app_mire::MireView,
     /// Dernier état « débogueur ouvert » transmis au thread d'émulation.
     debug_live_sent: bool,
+    /// Dernier état « onglet Son ouvert » transmis au thread d'émulation.
+    voices_live_sent: bool,
     sound: Option<Sound>,
     pub(crate) paused: bool,
     pub(crate) slot: u8,
@@ -181,6 +183,7 @@ impl App {
             bfi_black: false,
             mire: Default::default(),
             debug_live_sent: false,
+            voices_live_sent: false,
             sound: sound.map(|out| Sound {
                 resampler: AudioResampler::new(48_000.0, out.rate),
                 out,
@@ -286,6 +289,7 @@ impl App {
                     }
                 }
                 Event::Memory(m) => self.debugger.set_memory(m),
+                Event::Voices(v) => self.debugger.audio.set_voices(v),
             }
         }
         let now = Instant::now();
@@ -623,6 +627,11 @@ impl eframe::App for App {
         if live != self.debug_live_sent {
             self.send(Cmd::DebugLive(live));
             self.debug_live_sent = live;
+        }
+        let voices = live && self.debugger.tab == crate::debugger::Tab::Audio;
+        if voices != self.voices_live_sent {
+            self.send(Cmd::VoicesLive(voices));
+            self.voices_live_sent = voices;
         }
         self.save_prefs_if_changed();
         ctx.request_repaint();

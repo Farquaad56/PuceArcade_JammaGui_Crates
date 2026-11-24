@@ -1,10 +1,11 @@
 //! Débogueur générique (ergonomie reprise de ref/puce16-neogeo/ng-gui/debugger.rs), construit
 //! uniquement à partir de `DebugSnapshot` : aucune connaissance d'un CPU ou d'une puce précis.
 //! Onglets CPU (registres en hexadécimal), Mémoire (lecture seule par `Cmd::Peek`),
-//! Registres et Vidéo (`video_debug.rs`).
+//! Registres et Vidéo (`video_debug.rs`), Son (oscilloscope par voie, `audio_debug.rs`).
 
 use eframe::egui;
 
+use crate::audio_debug::AudioDebug;
 use crate::emu_thread::{DebugSnapshot, MAX_PEEK};
 use crate::video_debug::VideoDebug;
 
@@ -16,6 +17,8 @@ pub enum DebugAction {
     Step(usize),
     FrameAdvance,
     LayerMask(u32),
+    /// Voies coupées (bit n = voie n).
+    VoiceMute(u64),
     Peek {
         cpu: usize,
         addr: u32,
@@ -29,10 +32,17 @@ pub enum Tab {
     Memory,
     Registers,
     Video,
+    Audio,
 }
 
 impl Tab {
-    pub const ALL: [Tab; 4] = [Tab::Cpu, Tab::Memory, Tab::Registers, Tab::Video];
+    pub const ALL: [Tab; 5] = [
+        Tab::Cpu,
+        Tab::Memory,
+        Tab::Registers,
+        Tab::Video,
+        Tab::Audio,
+    ];
 
     /// Nom stable écrit dans prefs.toml.
     pub fn name(self) -> &'static str {
@@ -41,6 +51,7 @@ impl Tab {
             Tab::Memory => "memory",
             Tab::Registers => "registers",
             Tab::Video => "video",
+            Tab::Audio => "audio",
         }
     }
 
@@ -54,6 +65,7 @@ impl Tab {
             Tab::Memory => "Mémoire",
             Tab::Registers => "Registres",
             Tab::Video => "Vidéo",
+            Tab::Audio => "Son",
         }
     }
 }
@@ -107,6 +119,7 @@ pub struct Debugger {
     addr_text: String,
     memory: Vec<u8>,
     pub(crate) video: VideoDebug,
+    pub(crate) audio: AudioDebug,
 }
 
 impl Debugger {
@@ -122,6 +135,7 @@ impl Debugger {
             addr_text: "0".into(),
             memory: Vec::new(),
             video: VideoDebug::default(),
+            audio: AudioDebug::default(),
         }
     }
 
@@ -191,6 +205,7 @@ impl Debugger {
                 None
             }
             Tab::Video => self.video.video_ui(ui, &self.snap, self.generation),
+            Tab::Audio => self.audio.ui(ui),
         };
         action.or(a)
     }

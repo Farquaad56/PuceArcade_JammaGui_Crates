@@ -127,6 +127,7 @@ impl App {
                 self.send(Cmd::FrameAdvance);
             }
             Some(DebugAction::LayerMask(m)) => self.send(Cmd::LayerMask(m)),
+            Some(DebugAction::VoiceMute(m)) => self.send(Cmd::VoiceMute(m)),
             Some(DebugAction::Peek { cpu, addr, len }) => self.send(Cmd::Peek { cpu, addr, len }),
             None => {}
         }

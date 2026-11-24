@@ -8,13 +8,14 @@
 
 use puce_jamma::audio::AudioInfo;
 use puce_jamma::board::{BoardInfo, JammaBoard};
-use puce_jamma::debug::{BoardDebug, CpuView, DebugImage};
+use puce_jamma::debug::{AudioVoice, BoardDebug, CpuView, DebugImage};
 use puce_jamma::dips::{DipBank, DipSetting, DipSwitch};
 use puce_jamma::inputs::JammaInputs;
 use puce_jamma::video::{Rotation, VideoInfo, VideoOut};
 
 mod draw;
 pub mod driver;
+mod voices;
 
 /// Carte de test JAMMA (mire).
 pub struct TestBoard {
@@ -27,6 +28,8 @@ pub struct TestBoard {
     layer_mask: u32,
     pixels: Vec<u32>,
     audio_counter: u64,
+    /// Voies coupées (débogueur) : bit 0 = bip.
+    voice_mute: u64,
 }
 
 impl TestBoard {
@@ -115,6 +118,7 @@ impl TestBoard {
             layer_mask: 0b111,
             pixels: vec![0x202020; 288 * 224],
             audio_counter: 0,
+            voice_mute: 0,
         }
     }
 
@@ -259,7 +263,7 @@ impl JammaBoard for TestBoard {
         let samples = 800;
         out.clear();
         for _ in 0..samples {
-            if self.inputs.players[0].buttons[0] {
+            if self.inputs.players[0].buttons[0] && self.voice_mute & 1 == 0 {
                 // Carré 1 kHz : période de 48 échantillons (48000/1000)
                 let phase = (self.audio_counter % 48) < 24;
                 out.push(if phase { 0.25 } else { -0.25 });
@@ -368,6 +372,18 @@ impl BoardDebug for TestBoard {
 
     fn set_layer_mask(&mut self, mask: u32) {
         self.layer_mask = mask;
+    }
+
+    fn voices(&self) -> Vec<AudioVoice> {
+        voices::voices(
+            self.audio_counter,
+            self.inputs.players[0].buttons[0],
+            self.cursor_x,
+        )
+    }
+
+    fn set_voice_mute(&mut self, mask: u64) {
+        self.voice_mute = mask;
     }
 }
 

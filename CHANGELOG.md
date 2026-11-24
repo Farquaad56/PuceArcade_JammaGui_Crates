@@ -1,5 +1,13 @@
 # Changelog
 
+## v0.7.0
+- Débogueur : onglet « Son », un oscilloscope par voie sonore (ADR 004), regroupé par puce, en grille de 1 à 4
+  colonnes ; déclenchement sur front montant, fenêtre de 2 à 100 ms, échelle auto ; clic = couper la voie,
+  clic droit = solo, « Tout réactiver ». Rafraîchi ≈ 30 fois par seconde en marche.
+- Contrat : `AudioVoice`, `BoardDebug::voices`, `set_voice_scope`, `set_voice_mute` (implémentations par défaut :
+  non cassant). Frontal : `Cmd::VoicesLive`, `Cmd::VoiceMute`, `Event::Voices`.
+- Carte de test : trois voies (bip réel, sinus 440 Hz, dent de scie suivant le curseur).
+
 ## v0.6.1
 - Son : rééchantillonneur à filtre sinc fenêtré (Kaiser, 32 coefficients, 512 phases) à la place de l'interpolation
   linéaire. Une source à 24 kHz n'envoie plus d'images spectrales au-dessus de 12 kHz (réjection > 60 dB) :

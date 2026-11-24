@@ -62,6 +62,7 @@ mod app_actions;
 mod app_mire;
 mod app_panels;
 pub mod audio;
+pub mod audio_debug;
 pub mod bezel;
 pub mod bindings;
 pub mod capture;

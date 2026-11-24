@@ -42,10 +42,17 @@ struct Emu {
     next: Instant,
     /// Débogueur ouvert : instantanés réguliers.
     debug_live: bool,
+    /// Onglet Son ouvert : voies envoyées régulièrement.
+    voices_live: bool,
+    /// Voies coupées, réappliquées à chaque chargement.
+    voice_mute: u64,
 }
 
 /// En marche, débogueur ouvert : un instantané toutes les `LIVE_EVERY` trames.
 const LIVE_EVERY: u64 = 10;
+
+/// En marche, onglet Son ouvert : les voies toutes les `VOICES_EVERY` trames (≈ 30 par seconde).
+const VOICES_EVERY: u64 = 2;
 
 impl Emu {
     fn new(driver: Arc<dyn BoardDriver>, tx: Sender<Event>) -> Self {
@@ -59,6 +66,8 @@ impl Emu {
             period: frame_period(60.0),
             next: Instant::now(),
             debug_live: false,
+            voices_live: false,
+            voice_mute: 0,
         }
     }
 
@@ -130,6 +139,26 @@ impl Emu {
         if let Some(d) = dbg {
             self.send(Event::Debug(d));
         }
+        if self.voices_live && (with_debug || frame % VOICES_EVERY == 0) {
+            self.send_voices();
+        }
+    }
+
+    /// Voies de la carte courante (rien si elle n'a pas de débogueur).
+    fn send_voices(&mut self) {
+        if let Some(d) = self.board.as_mut().and_then(|b| b.debug()) {
+            let v = d.voices();
+            self.send(Event::Voices(v));
+        }
+    }
+
+    /// Applique l'état des voies (enregistrement, muets) à la carte courante.
+    fn apply_voice_state(&mut self) {
+        let (live, mute) = (self.voices_live, self.voice_mute);
+        if let Some(d) = self.board.as_mut().and_then(|b| b.debug()) {
+            d.set_voice_scope(live);
+            d.set_voice_mute(mute);
+        }
     }
 
     fn handle(&mut self, cmd: Cmd) {
@@ -146,12 +175,26 @@ impl Emu {
                 if p && self.debug_live {
                     self.send_snapshot();
                 }
+                if p && self.voices_live {
+                    self.send_voices();
+                }
             }
             Cmd::DebugLive(on) => {
                 self.debug_live = on;
                 if on {
                     self.send_snapshot();
                 }
+            }
+            Cmd::VoicesLive(on) => {
+                self.voices_live = on;
+                self.apply_voice_state();
+                if on {
+                    self.send_voices();
+                }
+            }
+            Cmd::VoiceMute(m) => {
+                self.voice_mute = m;
+                self.apply_voice_state();
             }
             Cmd::Inputs(i) => self.inputs = i,
             Cmd::Dips(d) => {
@@ -194,6 +237,7 @@ impl Emu {
                 self.next = Instant::now();
                 self.game = name;
                 self.board = Some(b);
+                self.apply_voice_state();
                 self.send(Event::Loaded(info));
                 if self.debug_live {
                     self.send_snapshot();
@@ -236,6 +280,9 @@ impl Emu {
             frame,
         });
         self.send(Event::Debug(snap));
+        if self.voices_live {
+            self.send_voices();
+        }
     }
 
     fn save_state(&mut self, slot: u8) {
@@ -444,6 +491,41 @@ mod tests {
             }
         }
         assert!(snaps >= 3, "instantanés réguliers en marche : {snaps}");
+        tx.send(Cmd::Quit).unwrap();
+        join.join().unwrap();
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn voices_live_sends_voices_and_keeps_mute() {
+        let dir = temp_dir("voices");
+        let (tx, rx, join) = spawn(Arc::new(TestDriver::new(&dir)));
+        tx.send(Cmd::VoiceMute(1)).unwrap();
+        tx.send(Cmd::VoicesLive(true)).unwrap();
+        tx.send(Cmd::Load("mire".into())).unwrap();
+        let deadline = Instant::now() + Duration::from_secs(5);
+        let mut n = 0;
+        while Instant::now() < deadline && n < 5 {
+            if let Ok(Event::Voices(v)) = rx.recv_timeout(Duration::from_millis(100)) {
+                assert_eq!(v.len(), 3);
+                assert_eq!(v[1].name, "Sinus");
+                n += 1;
+            }
+        }
+        assert!(n >= 5, "voies régulières en marche : {n}");
+        // muet appliqué à la carte chargée après la commande : bouton 1 sans son
+        let mut inputs = JammaInputs::default();
+        inputs.players[0].buttons[0] = true;
+        tx.send(Cmd::Inputs(inputs)).unwrap();
+        let deadline = Instant::now() + Duration::from_secs(5);
+        let mut silent = 0;
+        while Instant::now() < deadline && silent < 5 {
+            if let Ok(Event::Audio(a)) = rx.recv_timeout(Duration::from_millis(100)) {
+                assert!(a.iter().all(|s| *s == 0.0));
+                silent += 1;
+            }
+        }
+        assert!(silent >= 5);
         tx.send(Cmd::Quit).unwrap();
         join.join().unwrap();
         let _ = std::fs::remove_dir_all(&dir);
