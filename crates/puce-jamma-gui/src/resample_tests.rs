@@ -9,7 +9,7 @@ fn run(src: f64, dst: u32, input: &[[f32; 2]]) -> Vec<[f32; 2]> {
     }
     let mut v = Vec::new();
     r.pop_into(&mut v);
-    v.chunks_exact(2).map(|c| [c[0], c[1]]).collect()
+    v.as_chunks::<2>().0.to_vec()
 }
 
 fn sine(hz: f64, rate: f64, n: usize) -> Vec<[f32; 2]> {
@@ -103,6 +103,8 @@ fn stereo_keeps_channels() {
     let mut v = Vec::new();
     r.pop_into(&mut v);
     assert!(v
-        .chunks_exact(2)
+        .as_chunks::<2>()
+        .0
+        .iter()
         .all(|c| (c[0] - 0.1).abs() < 1e-4 && (c[1] + 0.2).abs() < 1e-4));
 }
