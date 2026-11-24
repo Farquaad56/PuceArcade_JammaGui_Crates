@@ -48,6 +48,8 @@ pub enum MenuAction {
     Mute(bool),
     Debugger,
     StatusBar(bool),
+    /// Fenêtre « À propos ».
+    About,
 }
 
 /// Raccourcis : F3 réinitialiser, Ctrl+P pause (P seul est le Start du joueur 2), F5 sauver l'état,
@@ -97,6 +99,8 @@ pub struct MenuState<'a> {
     pub has_debugger: bool,
     pub debug_open: bool,
     pub status_bar: bool,
+    /// Le programme fournit une fenêtre « À propos ».
+    pub has_about: bool,
 }
 
 fn item(ui: &mut egui::Ui, enabled: bool, text: &str, a: MenuAction, out: &mut Option<MenuAction>) {
@@ -311,6 +315,11 @@ pub fn show(ui: &mut egui::Ui, st: &MenuState) -> Option<MenuAction> {
             .clicked()
         {
             out = Some(MenuAction::Debugger);
+        }
+        if st.has_about {
+            ui.menu_button("?", |ui| {
+                item(ui, true, "À propos…", MenuAction::About, &mut out)
+            });
         }
     });
     out

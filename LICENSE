@@ -1,0 +1,126 @@
+LICENCE PUCEARCADE — USAGE NON COMMERCIAL, TOUS DROITS RÉSERVÉS
+Version 1.0 du 24 novembre 2026
+
+Copyright (c) 2026 Le Garrec Sebastien. Tous droits réservés.
+
+PuceArcade JAMMA — frontal et contrat de cartes d'arcade émulées, en Rust, par Le Garrec Sebastien.
+
+Le présent texte définit les seules conditions dans lesquelles le Logiciel peut être utilisé.
+Tout droit qui n'est pas expressément accordé ci-dessous est réservé à l'Auteur.
+
+
+1. Définitions
+
+« Auteur » : Le Garrec Sebastien, titulaire des droits sur le Logiciel.
+« Logiciel » : le code source, les programmes compilés, la documentation, les données, les
+scripts et tout autre élément de ce dépôt, à l'exception des Composants tiers (article 7).
+« Vous » : toute personne physique ou morale qui utilise le Logiciel.
+« Usage commercial » : tout usage destiné, directement ou indirectement, à procurer un revenu ou
+un avantage économique, notamment :
+  a) vendre, louer ou faire payer le Logiciel, une copie, une version modifiée ou un programme
+     qui l'incorpore, y compris sous forme de paquet, d'image système ou de matériel préinstallé ;
+  b) fournir un service payant qui repose sur le Logiciel (hébergement, diffusion, location de
+     borne, prestation, assistance) ;
+  c) exploiter le Logiciel dans une borne, une salle de jeux ou un lieu public payant, ou dans
+     un cadre publicitaire ou promotionnel ;
+  d) monétiser une diffusion ou une vidéo dont le Logiciel est l'objet principal, sauf accord
+     de l'Auteur (les vidéos et diffusions sans revenu sont autorisées, voir l'article 2).
+
+
+2. Ce que Vous pouvez faire
+
+À condition de respecter l'ensemble de la présente licence, l'Auteur Vous accorde, gratuitement,
+pour le monde entier et pour la durée des droits d'auteur, le droit non exclusif et non
+transférable de :
+  a) télécharger, compiler, installer et exécuter le Logiciel pour un usage personnel, privé,
+     éducatif ou de recherche, sans Usage commercial ;
+  b) étudier le code source et le modifier pour Votre propre usage ;
+  c) redistribuer gratuitement des copies NON MODIFIÉES du Logiciel, à condition de joindre la
+     présente licence et de conserver toutes les mentions de droits d'auteur ;
+  d) créer une copie (« fork ») du dépôt sur une plateforme publique dans le seul but de proposer
+     des contributions à l'Auteur ;
+  e) montrer le Logiciel en fonctionnement dans des captures, vidéos ou diffusions sans revenu,
+     en citant le nom du Logiciel et l'Auteur.
+
+
+3. Ce que Vous ne pouvez pas faire sans l'accord écrit préalable de l'Auteur
+
+  a) tout Usage commercial du Logiciel ou d'une partie du Logiciel ;
+  b) distribuer une version modifiée du Logiciel ou une œuvre dérivée, sous quelque forme que ce
+     soit, en dehors du cas prévu à l'article 2 d) ;
+  c) intégrer tout ou partie du Logiciel dans un autre logiciel ou produit distribué ;
+  d) accorder une sous-licence ou céder les droits reçus ;
+  e) supprimer, masquer ou modifier les mentions de droits d'auteur, de licence ou d'auteur,
+     y compris dans la fenêtre « À propos » du programme ;
+  f) utiliser le nom « PuceArcade » ou le nom de l'Auteur pour présenter, promouvoir ou faire
+     croire à une approbation d'un autre produit ou service ;
+  g) utiliser le Logiciel pour entraîner ou constituer des jeux de données destinés à un usage
+     commercial.
+
+Une licence commerciale ou toute autre autorisation peut être demandée à l'Auteur, qui reste
+libre de l'accorder ou non, et à ses conditions.
+
+
+4. ROM, BIOS et contenus des jeux
+
+Le Logiciel ne contient et ne fournit aucune ROM, aucun BIOS ni aucun contenu protégé des jeux
+émulés. Ces contenus appartiennent à leurs ayants droit. Il Vous appartient de détenir les
+droits nécessaires sur les contenus que Vous utilisez avec le Logiciel. L'Auteur ne saurait être
+tenu responsable de leur usage.
+
+
+5. Contributions
+
+En proposant une contribution (code, documentation, données, correction) à l'Auteur, Vous
+déclarez en être l'auteur ou avoir le droit de la proposer, et Vous accordez à l'Auteur, à titre
+gratuit, le droit perpétuel, mondial et irrévocable de l'utiliser, de la modifier et de la
+distribuer avec le Logiciel, sous la présente licence ou sous toute autre licence de son choix.
+
+
+6. Absence de garantie et limitation de responsabilité
+
+LE LOGICIEL EST FOURNI « EN L'ÉTAT », SANS AUCUNE GARANTIE, EXPRESSE OU IMPLICITE, NOTAMMENT DE
+FONCTIONNEMENT, D'EXACTITUDE, D'ADÉQUATION À UN USAGE PARTICULIER OU D'ABSENCE DE CONTREFAÇON.
+DANS TOUTE LA MESURE PERMISE PAR LA LOI, L'AUTEUR NE POURRA ÊTRE TENU RESPONSABLE D'AUCUN
+DOMMAGE, DIRECT OU INDIRECT, RÉSULTANT DE L'UTILISATION OU DE L'IMPOSSIBILITÉ D'UTILISER LE
+LOGICIEL.
+
+
+7. Composants tiers
+
+Certaines parties du dépôt proviennent de tiers ou en sont des adaptations. Elles restent
+soumises à leur propre licence, qui prévaut sur la présente pour ces parties ; leurs mentions de
+droits d'auteur et de licence sont conservées dans les fichiers concernés. La présente licence ne
+restreint pas les droits que ces licences Vous accordent sur ces parties.
+
+Dans ce dépôt, notamment :
+  - les coefficients de filtres et motifs de masques (data/fx.bin, data/masks/) issus des
+    filtres vidéo de la communauté MiSTer, sous leurs conditions d'origine ;
+  - les algorithmes d'agrandissement (HQ2x, Scale2x, Eagle, 2xSaI…) et formules CRT inspirés
+    d'implémentations publiques (RetroArch, Timothy Lottes), dont les auteurs restent cités
+    dans les fichiers concernés ;
+  - les copies de référence du dossier ref/, sous leurs licences d'origine ;
+  - les dépendances Rust (crates), sous leurs licences respectives.
+
+
+8. Fin de la licence
+
+Tout manquement à la présente licence met fin automatiquement, et sans préavis, aux droits
+qu'elle Vous accorde. Vous devez alors cesser toute utilisation et toute distribution du
+Logiciel. Les articles 4, 6 et 9 restent applicables.
+
+
+9. Droit applicable
+
+La présente licence est régie par le droit français. Si l'une de ses clauses est jugée
+inapplicable, les autres restent en vigueur.
+
+
+10. Versions antérieures
+
+Les versions du Logiciel publiées avant le 24 novembre 2026 sous une autre licence restent
+soumises à celle-ci pour ces seules versions. Toute version publiée à partir de cette date, et
+toute copie du dépôt obtenue à partir de cette date, est soumise à la présente licence.
+
+
+Contact : https://github.com/Farquaad56

@@ -3,7 +3,7 @@ name = "puce-jamma-gui"
 description = "Frontal egui réutilisable pour cartes JAMMA émulées (filtres, overlay, son, manettes, DIP, débogueur)"
 version.workspace = true
 edition.workspace = true
-license.workspace = true
+license-file.workspace = true
 
 [dependencies]
 puce-jamma = { path = "../puce-jamma" }

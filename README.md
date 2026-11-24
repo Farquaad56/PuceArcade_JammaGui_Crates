@@ -88,3 +88,10 @@ inférieur à 128 autour du centre ; l'image du jeu le remplit si ses proportion
 elle y est centrée. La vitre semi-transparente du bezel (reflets) est dessinée par-dessus le jeu. Elle se désactive par la case « Reflets de la vitre » du menu Affichage.
 Case « Bezels en plein écran » dans le menu Affichage, ou Ctrl+B ; le choix est gardé dans `prefs.toml`.
 
+## Licence
+
+Projet d'émulateur en Rust par **Le Garrec Sebastien**. Licence **PuceArcade — usage non commercial, tous droits
+réservés** (fichier [`LICENSE`](LICENSE)) : usage personnel, éducatif et de recherche gratuit, copies non modifiées
+redistribuables gratuitement ; tout usage commercial, toute version modifiée distribuée et toute intégration dans un
+autre produit demandent l'accord écrit de l'auteur. Les parties issues de tiers (données de filtres MiSTer, dossier `ref/`) restent sous leur propre
+licence. Les versions publiées avant le 24 novembre 2026 restaient sous licence MIT.

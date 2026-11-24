@@ -8,8 +8,8 @@ members = [
 
 [workspace.package]
 edition = "2021"
-version = "0.8.0"
-license = "MIT"
+version = "0.9.0"
+license-file = "LICENSE"
 repository = "https://github.com/Farquaad56/PuceArcade_JammaGui_Crates"
 authors = ["Farquaad56"]
 

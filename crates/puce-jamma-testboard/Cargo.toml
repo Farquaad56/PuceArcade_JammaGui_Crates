@@ -3,7 +3,7 @@ name = "puce-jamma-testboard"
 description = "Carte de test JAMMA (mire, entrées, bip) pour développer et tester les frontaux sans émulateur"
 version.workspace = true
 edition.workspace = true
-license.workspace = true
+license-file.workspace = true
 
 [dependencies]
 puce-jamma = { path = "../puce-jamma" }

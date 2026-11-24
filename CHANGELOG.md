@@ -1,5 +1,11 @@
 # Changelog
 
+## v0.9.0
+- Fenêtre « À propos » (menu « ? ») : nom, version, présentation, licence lisible dans la fenêtre. Fournie par le
+  programme (`AppOptions::about`, champ nouveau : à renseigner, `None` pour ne pas avoir de menu).
+- Licence : PuceArcade — usage non commercial, tous droits réservés (`LICENSE`), à la place de MIT. Les parties
+  issues de tiers restent sous leur licence.
+
 ## v0.8.0
 - Filtres vidéo calculés par la carte graphique (wgpu, ADR 005) : en x8 l'interface suit à nouveau la cadence du
   jeu. Rendu identique aux filtres processeur à 2 niveaux près (halo), vérifié par `gpufx_tests.rs` ; les filtres

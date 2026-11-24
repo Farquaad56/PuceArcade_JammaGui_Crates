@@ -55,6 +55,9 @@ impl App {
         if self.fx_win.show(ctx, &mut fx, &env) {
             self.prefs.fx = fx;
         }
+        if let Some(a) = &self.about {
+            self.about_win.show(ctx, a);
+        }
     }
 
     pub(crate) fn panels(&mut self, ui: &mut egui::Ui, ctx: &egui::Context) {
@@ -73,6 +76,7 @@ impl App {
                 has_debugger: self.board.is_some(),
                 debug_open: self.debugger.open,
                 status_bar: self.prefs.debug.show_status_bar,
+                has_about: self.about.is_some(),
             };
             let action = egui::Panel::top("menu")
                 .show(ui, |ui| menu::show(ui, &st))

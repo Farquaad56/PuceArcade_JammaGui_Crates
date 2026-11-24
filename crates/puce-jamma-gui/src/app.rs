@@ -142,6 +142,9 @@ pub struct App {
     pub(crate) dips_win: DipsWindow,
     pub(crate) fx_win: FxWindow,
     pub(crate) controls: ControlsWindow,
+    /// « À propos » fourni par le programme, et sa fenêtre.
+    pub(crate) about: Option<crate::about::About>,
+    pub(crate) about_win: crate::about::AboutWindow,
     pub(crate) debugger: Debugger,
 }
 
@@ -206,6 +209,8 @@ impl App {
             dips_win: DipsWindow::default(),
             fx_win: FxWindow::default(),
             controls: ControlsWindow::default(),
+            about: None,
+            about_win: Default::default(),
         };
         if let Some(g) = game {
             app.load_game(&g);
@@ -392,6 +397,12 @@ impl App {
 
     /// Dessine la trame dans la zone centrale.
     /// Dossier des bezels RetroArch (None : pas de bezels).
+    /// Fenêtre « À propos » (menu « ? »).
+    pub fn with_about(mut self, about: Option<crate::about::About>) -> Self {
+        self.about = about;
+        self
+    }
+
     /// Filtres sur carte graphique (rendu wgpu d'eframe), si elle convient.
     pub fn with_gpu(mut self, gpu: Option<crate::gpufx_paint::GpuInfo>) -> Self {
         self.gpu = gpu.map(|g| (g, None));

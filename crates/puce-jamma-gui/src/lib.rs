@@ -18,6 +18,8 @@ pub struct AppOptions {
     pub config_dir: PathBuf,
     /// Dossier des bezels au format RetroArch (`<jeu>.cfg` + PNG), affichés en plein écran.
     pub bezels_dir: Option<PathBuf>,
+    /// Fenêtre « À propos » (menu « ? ») ; None : pas de menu.
+    pub about: Option<about::About>,
 }
 
 /// Jeu lancé au démarrage : le dernier jeu des préférences s'il existe encore chez le driver,
@@ -45,6 +47,7 @@ pub fn run(driver: Box<dyn BoardDriver>, opts: AppOptions) -> Result<(), String>
     };
     let config_dir = opts.config_dir;
     let bezels_dir = opts.bezels_dir;
+    let about = opts.about;
     eframe::run_native(
         &opts.window_title,
         native,
@@ -53,6 +56,7 @@ pub fn run(driver: Box<dyn BoardDriver>, opts: AppOptions) -> Result<(), String>
             Ok(Box::new(
                 app::App::new(driver, &config_dir, game)
                     .with_bezels(bezels_dir)
+                    .with_about(about)
                     .with_gpu(gpu),
             ))
         }),
@@ -60,6 +64,7 @@ pub fn run(driver: Box<dyn BoardDriver>, opts: AppOptions) -> Result<(), String>
     .map_err(|e| e.to_string())
 }
 
+pub mod about;
 pub mod app;
 mod app_actions;
 mod app_mire;

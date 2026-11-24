@@ -52,6 +52,7 @@ impl App {
             MenuAction::MireStep(_) | MenuAction::MireVariant(_) | MenuAction::MirePanel => {}
             MenuAction::Dips => self.dips_win.open = true,
             MenuAction::Controls => self.controls.open = true,
+            MenuAction::About => self.about_win.open = true,
             MenuAction::Volume(v) => self.prefs.audio.volume = v.min(100),
             MenuAction::Mute(m) => self.prefs.audio.mute = m,
             MenuAction::Debugger => {

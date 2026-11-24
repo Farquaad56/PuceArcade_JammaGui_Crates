@@ -3,6 +3,6 @@ name = "puce-jamma"
 description = "Contrat « connecteur JAMMA » entre une carte d'arcade émulée et un frontal (vidéo, son, commandes, DIP, savestates, débogage)"
 version.workspace = true
 edition.workspace = true
-license.workspace = true
+license-file.workspace = true
 
 [dependencies]
