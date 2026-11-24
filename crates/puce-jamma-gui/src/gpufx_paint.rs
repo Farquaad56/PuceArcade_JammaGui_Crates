@@ -20,7 +20,18 @@ pub struct GpuInfo {
 
 /// Installe les filtres dans le moteur de rendu (rien si la carte graphique ne convient pas).
 pub fn install(rs: &egui_wgpu::RenderState) -> Option<GpuInfo> {
-    let float = float_format(&rs.adapter, &rs.device)?;
+    let a = rs.adapter.get_info();
+    let Some(float) = float_format(&rs.adapter, &rs.device) else {
+        eprintln!(
+            "filtres : processeur ({} via {:?} ne convient pas)",
+            a.name, a.backend
+        );
+        return None;
+    };
+    eprintln!(
+        "filtres : carte graphique {} via {:?} ({float:?})",
+        a.name, a.backend
+    );
     let fx = GpuFx::new(&rs.device, rs.target_format, float);
     rs.renderer.write().callback_resources.insert(fx);
     Some(GpuInfo {
