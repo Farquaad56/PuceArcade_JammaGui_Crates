@@ -93,7 +93,7 @@ pub enum Health {
 }
 
 impl Health {
-    fn color(self) -> Color32 {
+    pub fn color(self) -> Color32 {
         match self {
             Health::Good => GREEN,
             Health::Warn => Color32::from_rgb(255, 170, 40),
@@ -136,6 +136,8 @@ pub struct Perf {
     pub fps: f32,
     /// Durée lissée d'une image de l'interface (ms).
     pub ui_ms: f32,
+    /// Filtres calculés par la carte graphique (`fx_ms` : préparation par le processeur).
+    pub fx_gpu: bool,
     /// Coût lissé des filtres vidéo (ms), `None` si aucun filtre n'est actif.
     pub fx_ms: Option<f32>,
     /// Remplissage du tampon audio en fraction de la latence visée (1 = cible).
@@ -144,6 +146,8 @@ pub struct Perf {
     pub underruns: u64,
     /// Instant de la dernière sous-alimentation constatée.
     pub underrun_at: Option<Instant>,
+    /// Une sortie son alimente-t-elle le tampon (`set_audio` appelé) ?
+    pub audio_on: bool,
     /// Cadence réelle du système (trames/seconde).
     pub real_fps: f32,
     /// Budget d'émulation par trame en ms.
@@ -159,10 +163,12 @@ impl Perf {
             emu_ms: VecDeque::new(),
             fps: 0.0,
             ui_ms: 0.0,
+            fx_gpu: false,
             fx_ms: None,
             audio_fill: 0.0,
             underruns: 0,
             underrun_at: None,
+            audio_on: false,
             real_fps,
             budget_ms,
         }
@@ -200,6 +206,7 @@ impl Perf {
         }
         self.audio_fill = fill;
         self.underruns = underruns;
+        self.audio_on = true;
     }
 
     /// Rouge pendant 3 s après un craquement, orange si le tampon est presque vide ou très au-dessus
@@ -223,6 +230,7 @@ impl Perf {
         self.fps = 0.0;
         self.audio_fill = 0.0;
         self.underrun_at = None;
+        self.audio_on = false;
     }
 
     /// Lisse une durée d'image de l'interface.
@@ -264,6 +272,18 @@ fn seg(ui: &mut egui::Ui, label: &str, color: Color32, value: String) {
 fn seg_h(ui: &mut egui::Ui, label: &str, color: Color32, value: String, h: Health) {
     ui.label(RichText::new(label).monospace().strong().color(color));
     ui.label(RichText::new(value).monospace().strong().color(h.color()));
+}
+
+/// Qualité globale : pastille et mot de largeur fixe, colorés selon la santé.
+fn quality_seg(ui: &mut egui::Ui, q: &crate::quality::Quality) {
+    let c = q.health.color();
+    ui.label(RichText::new("●").monospace().color(c));
+    ui.label(
+        RichText::new(format!("{:<10}", q.label()))
+            .monospace()
+            .strong()
+            .color(c),
+    );
 }
 
 fn sep(ui: &mut egui::Ui) {
@@ -320,6 +340,7 @@ pub fn show(
     if !prefs.enabled {
         return;
     }
+    let quality = crate::quality::assess(&crate::quality::measures(perf));
     egui::Area::new(egui::Id::NULL.with("perf_overlay"))
         .order(egui::Order::Middle)
         .fixed_pos(corner_pos(area, prefs.corner))
@@ -339,13 +360,17 @@ pub fn show(
                                 return;
                             }
                             RunState::Paused => seg(ui, "PAUSE", PINK, " ".repeat(5)),
-                            RunState::Running => seg_h(
-                                ui,
-                                "FPS  ",
-                                Color32::WHITE,
-                                num(perf.fps, 5, 1),
-                                speed_health(perf.speed_pct()),
-                            ),
+                            RunState::Running => {
+                                quality_seg(ui, &quality);
+                                sep(ui);
+                                seg_h(
+                                    ui,
+                                    "FPS  ",
+                                    Color32::WHITE,
+                                    num(perf.fps, 5, 1),
+                                    speed_health(perf.speed_pct()),
+                                )
+                            }
                         }
                         let avg = perf.avg(30);
                         let emu =
@@ -377,9 +402,10 @@ pub fn show(
                         sep(ui);
                         seg(ui, "UI", GREEN, format!("{} ms", num(perf.ui_ms, 5, 1)));
                         // toujours présent (tiret sans filtre) : la largeur ne change pas
+                        let unit = if perf.fx_gpu { "GPU" } else { "CPU" };
                         let fx = perf.fx_ms.map_or_else(
-                            || format!("{:>5} ms", "-"),
-                            |v| format!("{} ms", num(v, 5, 1)),
+                            || format!("    {:>5} ms", "-"),
+                            |v| format!("{unit} {} ms", num(v, 5, 1)),
                         );
                         seg(ui, "FILTRE", GREEN, fx);
                         sep(ui);
@@ -393,6 +419,10 @@ pub fn show(
                         if let Some(s) = scale {
                             sep(ui);
                             ui.label(RichText::new(s).monospace().color(GREY));
+                        }
+                        if let (RunState::Running, Some(r)) = (state, &quality.reason) {
+                            sep(ui);
+                            ui.label(RichText::new(r).monospace().color(quality.health.color()));
                         }
                     });
                 });

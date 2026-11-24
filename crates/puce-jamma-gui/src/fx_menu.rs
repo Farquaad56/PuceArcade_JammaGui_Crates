@@ -41,6 +41,8 @@ pub struct FxEnv {
     pub refresh_hz: f32,
     /// Fréquence d'image du jeu, en Hz (0 sans jeu).
     pub game_hz: f32,
+    /// Les filtres sont calculés par la carte graphique (sinon par le processeur).
+    pub gpu: bool,
 }
 
 impl FxEnv {
@@ -124,6 +126,11 @@ impl FxWindow {
             .min_width(430.0)
             .show(ctx, |ui| {
                 header(ui, fx);
+                ui.weak(if env.gpu {
+                    "Calcul : carte graphique"
+                } else {
+                    "Calcul : processeur (carte graphique indisponible ou image trop grande)"
+                });
                 ui.separator();
                 ui.horizontal_wrapped(|ui| {
                     for t in Tab::ALL {
@@ -211,6 +218,7 @@ mod tests {
     #[test]
     fn bfi_needs_fast_screen() {
         let env = |r| FxEnv {
+            gpu: false,
             bezel: false,
             refresh_hz: r,
             game_hz: 59.6,

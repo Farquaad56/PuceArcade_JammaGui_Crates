@@ -355,19 +355,19 @@ const DARK_OFF: usize = STD_OFF + N_STD * 256;
 const BRIGHT_OFF: usize = DARK_OFF + 11 * 1024;
 
 /// Table (64 phases) du filtre d'interpolation de netteté `sharp` (%).
-fn sharp_table(sharp: u8) -> &'static [i16] {
+pub(crate) fn sharp_table(sharp: u8) -> &'static [i16] {
     let i = ((usize::from(sharp) + 2) / 5).min(N_SHARP - 1);
     &data()[i * 256..(i + 1) * 256]
 }
 
 /// Table (64 phases) des scanlines standard de profondeur `depth` (%).
-fn std_table(depth: u8) -> &'static [i16] {
+pub(crate) fn std_table(depth: u8) -> &'static [i16] {
     let i = (usize::from(depth.min(95)) / 5).min(N_STD - 1);
     &data()[STD_OFF + i * 256..STD_OFF + (i + 1) * 256]
 }
 
 /// Tables (256 phases) sombre et claire des scanlines adaptatives.
-fn adaptive_tables(dk: u8, br: u8) -> (&'static [i16], &'static [i16]) {
+pub(crate) fn adaptive_tables(dk: u8, br: u8) -> (&'static [i16], &'static [i16]) {
     let dk10 = ((usize::from(dk) + 5) / 10).min(10);
     let br10 = ((usize::from(br) + 5) / 10).min(10).max(dk10);
     let dark = DARK_OFF + dk10 * 1024;
@@ -377,11 +377,11 @@ fn adaptive_tables(dk: u8, br: u8) -> (&'static [i16], &'static [i16]) {
 }
 
 /// Motif de masque : taille et gain RVB de chaque cellule.
-struct Pattern {
-    res: usize,
-    w: usize,
-    h: usize,
-    cells: Vec<[f32; 3]>,
+pub(crate) struct Pattern {
+    pub(crate) res: usize,
+    pub(crate) w: usize,
+    pub(crate) h: usize,
+    pub(crate) cells: Vec<[f32; 3]>,
 }
 
 /// Lit un fichier de masque (format « v2 » : une cellule = couleur, intensité allumée, éteinte).
@@ -421,7 +421,7 @@ fn parse_mask(text: &str) -> Vec<Pattern> {
     out
 }
 
-fn mask_patterns(m: Mask) -> Option<&'static [Pattern]> {
+pub(crate) fn mask_patterns(m: Mask) -> Option<&'static [Pattern]> {
     static T: OnceLock<[Vec<Pattern>; 2]> = OnceLock::new();
     let t = T.get_or_init(|| {
         [
@@ -570,6 +570,72 @@ fn beam_row(c: &Ctx, y: usize, vrow: &mut [[u8; 3]]) {
     }
 }
 
+/// Source prête pour les filtres : après overscan et agrandissement ×2.
+pub(crate) struct Source {
+    /// Pixels 0x00RRGGBB, `w` × `h`.
+    pub(crate) pixels: Vec<u32>,
+    pub(crate) w: usize,
+    pub(crate) h: usize,
+    /// Hauteur après overscan, avant agrandissement (taille du halo et de l'instabilité).
+    pub(crate) orig_h: usize,
+}
+
+/// Overscan puis agrandissement ×2 éventuel (commun aux filtres processeur et carte graphique).
+pub(crate) fn prepare_source(src: &[u32], src_w: usize, src_h: usize, fx: &Fx) -> Source {
+    let (src, src_w, src_h) = if fx.overscan > 0 {
+        crt::crop(src, src_w, src_h, fx.overscan)
+    } else {
+        (src[..src_w * src_h].to_vec(), src_w, src_h)
+    };
+    match pixel2x::upscale(&src, src_w, src_h, fx.scaler) {
+        Some(v) => Source {
+            pixels: v,
+            w: 2 * src_w,
+            h: 2 * src_h,
+            orig_h: src_h,
+        },
+        None => Source {
+            pixels: src,
+            w: src_w,
+            h: src_h,
+            orig_h: src_h,
+        },
+    }
+}
+
+/// Table du gamma (256 entrées).
+pub(crate) fn gamma_lut(fx: &Fx) -> Vec<u32> {
+    let g = f32::from(fx.gamma) / 100.0;
+    (0..256)
+        .map(|v| {
+            if fx.gamma == 100 {
+                v as u32
+            } else {
+                (255.0 * (v as f32 / 255.0).powf(g)).round() as u32
+            }
+        })
+        .collect()
+}
+
+/// Masque d'écran pour une sortie de hauteur `h` (motif choisi selon la hauteur, comme le mode
+/// « 1x ») : (largeur, hauteur, gains RVB en 8.8 de chaque cellule).
+pub(crate) fn mask_gains(fx: &Fx, h: usize) -> (usize, usize, Vec<[u32; 3]>) {
+    let mp = f32::from(fx.mask_pct) / 100.0;
+    let gains = |c: &[f32; 3]| -> [u32; 3] {
+        std::array::from_fn(|ch| ((1.0 - mp * (1.0 - c[ch])) * 256.0 + 0.5) as u32)
+    };
+    if fx.mask.procedural() {
+        let (pw, ph, c) = crt::procedural_mask(fx.mask, crt::pitch(fx.mask_pitch, h));
+        return (pw, ph, c.iter().map(gains).collect());
+    }
+    let pat =
+        mask_patterns(fx.mask).and_then(|ps| ps.iter().rev().find(|p| p.res <= h).or(ps.first()));
+    match pat {
+        Some(p) => (p.w, p.h, p.cells.iter().map(gains).collect()),
+        None => (1, 1, vec![[256u32; 3]]),
+    }
+}
+
 /// Applique les filtres : `src` = image (0x00RRGGBB), sortie `w` x `h`.
 /// `frame` = numéro de trame (position de la barre de balayage).
 pub fn render(
@@ -582,17 +648,10 @@ pub fn render(
     frame: u64,
 ) -> Vec<Color32> {
     assert!(src.len() >= src_w * src_h && w > 0 && h > 0);
-    let cropped = (fx.overscan > 0).then(|| crt::crop(src, src_w, src_h, fx.overscan));
-    let (src, src_w, src_h) = match &cropped {
-        Some((v, cw, ch)) => (&v[..], *cw, *ch),
-        None => (src, src_w, src_h),
-    };
-    let big = pixel2x::upscale(src, src_w, src_h, fx.scaler);
-    let (sw, sh, pix) = match &big {
-        Some(v) => (2 * src_w, 2 * src_h, &v[..]),
-        None => (src_w, src_h, &src[..src_w * src_h]),
-    };
-    let src: Vec<[u8; 3]> = pix
+    let p = prepare_source(src, src_w, src_h, fx);
+    let (sw, sh, src_h) = (p.w, p.h, p.orig_h);
+    let src: Vec<[u8; 3]> = p
+        .pixels
         .iter()
         .map(|p| [(p >> 16) as u8, (p >> 8) as u8, *p as u8])
         .collect();
@@ -615,34 +674,8 @@ pub fn render(
         })
         .collect();
 
-    // gamma
-    let g = f32::from(fx.gamma) / 100.0;
-    let lut: Vec<u32> = (0..256)
-        .map(|v| {
-            if fx.gamma == 100 {
-                v as u32
-            } else {
-                (255.0 * (v as f32 / 255.0).powf(g)).round() as u32
-            }
-        })
-        .collect();
-
-    // masque (motif choisi selon la hauteur, comme le mode « 1x »), gains en 8.8
-    let mp = f32::from(fx.mask_pct) / 100.0;
-    let gains = |c: &[f32; 3]| -> [u32; 3] {
-        std::array::from_fn(|ch| ((1.0 - mp * (1.0 - c[ch])) * 256.0 + 0.5) as u32)
-    };
-    let (pw, ph, cells): (usize, usize, Vec<[u32; 3]>) = if fx.mask.procedural() {
-        let (pw, ph, c) = crt::procedural_mask(fx.mask, crt::pitch(fx.mask_pitch, h));
-        (pw, ph, c.iter().map(gains).collect())
-    } else {
-        let pat = mask_patterns(fx.mask)
-            .and_then(|ps| ps.iter().rev().find(|p| p.res <= h).or(ps.first()));
-        match pat {
-            Some(p) => (p.w, p.h, p.cells.iter().map(gains).collect()),
-            None => (1, 1, vec![[256u32; 3]]),
-        }
-    };
+    let lut = gamma_lut(fx);
+    let (pw, ph, cells) = mask_gains(fx, h);
 
     let (dark_t, bright_t) = adaptive_tables(fx.scan_dk, fx.scan_br);
     let ctx = Ctx {

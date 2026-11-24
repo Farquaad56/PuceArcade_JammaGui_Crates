@@ -48,9 +48,12 @@ pub fn run(driver: Box<dyn BoardDriver>, opts: AppOptions) -> Result<(), String>
     eframe::run_native(
         &opts.window_title,
         native,
-        Box::new(move |_cc| {
+        Box::new(move |cc| {
+            let gpu = cc.wgpu_render_state.as_ref().and_then(gpufx_paint::install);
             Ok(Box::new(
-                app::App::new(driver, &config_dir, game).with_bezels(bezels_dir),
+                app::App::new(driver, &config_dir, game)
+                    .with_bezels(bezels_dir)
+                    .with_gpu(gpu),
             ))
         }),
     )
@@ -79,6 +82,12 @@ mod fx_prefs;
 mod fx_tabs;
 pub mod gamepad;
 pub mod games;
+pub mod gpufx;
+pub mod gpufx_data;
+pub mod gpufx_offscreen;
+pub mod gpufx_paint;
+#[cfg(test)]
+mod gpufx_tests;
 pub mod input;
 pub mod menu;
 pub mod mire;
@@ -88,6 +97,7 @@ pub mod overlay;
 pub mod pixel2x;
 pub mod postfx;
 pub mod prefs;
+pub mod quality;
 pub mod resample;
 pub mod statusbar;
 pub mod video_debug;

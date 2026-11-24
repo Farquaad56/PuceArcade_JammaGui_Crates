@@ -76,7 +76,7 @@ pub(crate) struct Shown {
 
 /// Ce qui détermine l'image filtrée en cache.
 #[derive(Clone, Copy, PartialEq)]
-struct FxKey {
+pub(crate) struct FxKey {
     /// Image d'une mire (et non du jeu) : caches distincts à numéro de trame égal.
     mire: bool,
     frame: u64,
@@ -108,6 +108,8 @@ pub struct App {
     shown: Option<Shown>,
     texture: Option<egui::TextureHandle>,
     fx_tex: Option<(FxKey, egui::TextureHandle)>,
+    /// Filtres sur carte graphique (None : filtres processeur) et dernière image préparée.
+    gpu: Option<(crate::gpufx_paint::GpuInfo, Option<FxKey>)>,
     pub(crate) layout: Option<DisplayRect>,
     /// Zone centrale (image) de la dernière trame affichée : l'overlay s'y place.
     pub(crate) central_rect: Option<egui::Rect>,
@@ -174,6 +176,7 @@ impl App {
             shown: None,
             texture: None,
             fx_tex: None,
+            gpu: None,
             layout: None,
             central_rect: None,
             bezels_dir: None,
@@ -389,6 +392,56 @@ impl App {
 
     /// Dessine la trame dans la zone centrale.
     /// Dossier des bezels RetroArch (None : pas de bezels).
+    /// Filtres sur carte graphique (rendu wgpu d'eframe), si elle convient.
+    pub fn with_gpu(mut self, gpu: Option<crate::gpufx_paint::GpuInfo>) -> Self {
+        self.gpu = gpu.map(|g| (g, None));
+        self
+    }
+
+    /// Image filtrée par la carte graphique, à dessiner dans `l.rect` ; None : filtres processeur
+    /// (pas de carte graphique utilisable, aucun filtre, image trop grande ou hors de la fenêtre).
+    fn gpu_filtered(
+        &mut self,
+        ctx: &egui::Context,
+        l: &DisplayRect,
+        fx: Fx,
+        mire: bool,
+    ) -> Option<egui::Shape> {
+        let (info, last) = self.gpu.as_mut()?;
+        let fits = crate::gpufx_paint::fits(
+            info,
+            l.px,
+            l.rect,
+            ctx.content_rect(),
+            ctx.pixels_per_point(),
+        );
+        let s = if mire {
+            self.mire.shown.as_ref()?
+        } else {
+            self.shown.as_ref()?
+        };
+        if !fx.is_active() || !fits {
+            *last = None;
+            return None;
+        }
+        let key = FxKey {
+            mire,
+            frame: s.frame,
+            px: l.px,
+            fx,
+        };
+        let job = (*last != Some(key)).then(|| {
+            let t0 = Instant::now();
+            let (w, h) = (l.px.0 as usize, l.px.1 as usize);
+            let j = crate::gpufx_data::build_job(&s.pixels, s.w, s.h, &fx, w, h, s.frame);
+            self.perf.smooth_fx(t0.elapsed().as_secs_f32() * 1000.0);
+            j
+        });
+        *last = Some(key);
+        self.perf.fx_gpu = true;
+        Some(crate::gpufx_paint::shape(l.rect, l.px, job))
+    }
+
     pub fn with_bezels(mut self, dir: Option<std::path::PathBuf>) -> Self {
         self.bezels_dir = dir;
         self
@@ -496,13 +549,21 @@ impl App {
         } else {
             self.prefs.fx
         };
-        let tex = self.filtered_texture(ui.ctx(), &l, fx, mire).unwrap_or(t);
+        let gpu = self.gpu_filtered(ui.ctx(), &l, fx, mire);
+        let tex = if gpu.is_some() {
+            t
+        } else {
+            self.perf.fx_gpu = false;
+            self.filtered_texture(ui.ctx(), &l, fx, mire).unwrap_or(t)
+        };
         let painter = ui.painter_at(avail);
         // images noires : une trame d'écran sur deux, si l'écran est au moins deux fois plus rapide
         let bfi = fx.bfi && self.fx_env().bfi_possible();
         self.bfi_black = bfi && !self.bfi_black;
         if self.bfi_black {
             painter.rect_filled(l.rect, 0.0, egui::Color32::BLACK);
+        } else if let Some(shape) = gpu {
+            painter.add(shape);
         } else {
             painter.image(tex, l.rect, uv, egui::Color32::WHITE);
         }
@@ -516,6 +577,8 @@ impl App {
     /// Contexte des réglages de filtres : bezel affiché, fréquences de l'écran et du jeu.
     pub(crate) fn fx_env(&self) -> crate::fx_menu::FxEnv {
         crate::fx_menu::FxEnv {
+            // sans filtre actif, rien n'est calculé : on indique ce qui serait utilisé
+            gpu: self.gpu.is_some() && (self.perf.fx_gpu || !self.prefs.fx.is_active()),
             bezel: self.bezel_shown,
             refresh_hz: self.refresh_hz,
             game_hz: self

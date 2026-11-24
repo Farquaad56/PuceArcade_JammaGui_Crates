@@ -126,7 +126,7 @@ pub fn procedural_mask(m: Mask, p: usize) -> (usize, usize, Vec<[f32; 3]>) {
 }
 
 /// Décalage horizontal de la ligne `y` (instabilité), en pixels écran.
-fn jitter_dx(fx: &Fx, y: usize, h: usize, sh: usize, frame: u64) -> f32 {
+pub(crate) fn jitter_dx(fx: &Fx, y: usize, h: usize, sh: usize, frame: u64) -> f32 {
     if fx.jitter == 0 {
         return 0.0;
     }

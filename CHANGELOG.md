@@ -1,5 +1,13 @@
 # Changelog
 
+## v0.8.0
+- Filtres vidéo calculés par la carte graphique (wgpu, ADR 005) : en x8 l'interface suit à nouveau la cadence du
+  jeu. Rendu identique aux filtres processeur à 2 niveaux près (halo), vérifié par `gpufx_tests.rs` ; les filtres
+  processeur restent le repli (OpenGL sans cible flottante, image trop grande). La fenêtre Filtres indique le calcul
+  utilisé, la barre de performance « FILTRE GPU » ou « CPU ».
+- Barre de performance : qualité globale de l'émulation (« Excellente », « Correcte », « Dégradée ») d'après la
+  vitesse, les images réellement affichées, la marge du cœur et le son, avec la raison principale.
+
 ## v0.7.0
 - Débogueur : onglet « Son », un oscilloscope par voie sonore (ADR 004), regroupé par puce, en grille de 1 à 4
   colonnes ; déclenchement sur front montant, fenêtre de 2 à 100 ms, échelle auto ; clic = couper la voie,

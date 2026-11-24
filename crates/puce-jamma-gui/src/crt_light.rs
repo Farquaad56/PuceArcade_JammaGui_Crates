@@ -65,7 +65,7 @@ impl MaskGains<'_> {
 const BLOB: f32 = 0.09;
 
 /// Profils séparables d'une dimension : vignettage, taches près de 0 et près de 1.
-fn profile(n: usize, e: f32) -> Vec<[f32; 3]> {
+pub(crate) fn profile(n: usize, e: f32) -> Vec<[f32; 3]> {
     (0..n)
         .map(|i| {
             let u = (i as f32 + 0.5) / n as f32;
@@ -140,7 +140,7 @@ pub fn finish(out: &mut [Color32], w: usize, h: usize, fx: &Fx, mask: &MaskGains
 
 /// Coin arrondi : facteur 0 à 1 (antialiasé sur 1 px) au pixel (x, y) pour le rayon `r`.
 #[inline]
-fn corner(x: usize, y: usize, w: usize, h: usize, r: f32) -> f32 {
+pub(crate) fn corner(x: usize, y: usize, w: usize, h: usize, r: f32) -> f32 {
     let (fx, fy) = (x as f32 + 0.5, y as f32 + 0.5);
     let dx = (r - fx.min(w as f32 - fx)).max(0.0);
     let dy = (r - fy.min(h as f32 - fy)).max(0.0);
